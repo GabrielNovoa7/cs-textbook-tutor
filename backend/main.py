@@ -2,7 +2,8 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from pathlib import Path
 import shutil
 
-from backend.pdf_processor import extract_text_from_pdf
+from backend.pdf_processor import extract_pages_from_pdf
+from backend.text_chunker import chunk_pages
 
 
 app = FastAPI()
@@ -31,11 +32,19 @@ async def upload_textbook(file: UploadFile = File(...)):
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    text, page_count = extract_text_from_pdf(file_path)
+    pages, page_count = extract_pages_from_pdf(file_path)
+
+    chunks = chunk_pages(pages)
+
+    characters_extracted = sum(
+        len(page["text"])
+        for page in pages
+    )
 
     return {
         "filename": safe_filename,
         "pages": page_count,
-        "characters_extracted": len(text),
-        "preview": text[:500]
+        "characters_extracted": characters_extracted,
+        "chunks_created": len(chunks),
+        "first_chunk": chunks[0] if chunks else None
     }

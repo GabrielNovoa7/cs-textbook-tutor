@@ -1,15 +1,18 @@
-import fitz #PyMuPDF
+import pymupdf
 
 
-def extract_text_from_pdf(file_path):
-    document = fitz.open(file_path)
+def extract_pages_from_pdf(file_path):
+    document = pymupdf.open(file_path)
 
-    text = ""
+    pages = []
 
-    for page in document:
-        text += page.get_text() + "\n"
+    for page_number, page in enumerate(document, start=1):
+        pages.append({
+            "page_number": page_number,
+            "text": page.get_text()
+        })
 
     page_count = document.page_count
     document.close()
 
-    return text, page_count
+    return pages, page_count
