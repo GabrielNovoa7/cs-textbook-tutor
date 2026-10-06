@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from pathlib import Path
 from hashlib import sha256
 from uuid import uuid4
+from pydantic import BaseModel
 import shutil
 
 from backend.pdf_processor import extract_pages_from_pdf
@@ -12,11 +13,15 @@ from backend.database import (
     save_textbook,
     get_textbooks
 )
-
 from backend.vector_store import (
     add_textbook_chunks,
     search_textbook
 )
+from backend.tutor import generate_tutor_response
+
+
+class AskRequest(BaseModel):
+    question: str
 
 
 app = FastAPI()
@@ -102,9 +107,9 @@ async def upload_textbook(file: UploadFile = File(...)):
     )
 
     add_textbook_chunks(
-    textbook_id=textbook_id,
-    chunks=chunks
-)
+        textbook_id=textbook_id,
+        chunks=chunks
+    )
 
     return {
         "textbook_id": textbook_id,
@@ -114,6 +119,7 @@ async def upload_textbook(file: UploadFile = File(...)):
         "chunks_created": len(chunks),
         "already_exists": False
     }
+
 
 @app.get("/textbooks/{textbook_id}/search")
 def search_textbook_chunks(
@@ -129,4 +135,42 @@ def search_textbook_chunks(
         "query": query,
         "textbook_id": textbook_id,
         "results": results
+    }
+
+
+@app.post("/textbooks/{textbook_id}/ask")
+def ask_textbook(
+    textbook_id: int,
+    request: AskRequest
+):
+    passages = search_textbook(
+        textbook_id=textbook_id,
+        query=request.question,
+        results=5
+    )
+
+    if not passages:
+        raise HTTPException(
+            status_code=404,
+            detail="No relevant textbook content was found."
+        )
+
+    answer = generate_tutor_response(
+        question=request.question,
+        passages=passages
+    )
+
+    sources = [
+        {
+            "page_number": passage["page_number"],
+            "chunk_id": passage["chunk_id"],
+            "distance": passage["distance"]
+        }
+        for passage in passages
+    ]
+
+    return {
+        "question": request.question,
+        "answer": answer,
+        "sources": sources
     }
