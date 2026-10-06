@@ -19,3 +19,8 @@ node_modules/
 
 # VS Code
 .vscode/
+
+# Local database
+*.db
+*.db-shm
+*.db-wal
