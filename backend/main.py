@@ -13,6 +13,11 @@ from backend.database import (
     get_textbooks
 )
 
+from backend.vector_store import (
+    add_textbook_chunks,
+    search_textbook
+)
+
 
 app = FastAPI()
 
@@ -96,6 +101,11 @@ async def upload_textbook(file: UploadFile = File(...)):
         chunks=chunks
     )
 
+    add_textbook_chunks(
+    textbook_id=textbook_id,
+    chunks=chunks
+)
+
     return {
         "textbook_id": textbook_id,
         "filename": original_filename,
@@ -103,4 +113,20 @@ async def upload_textbook(file: UploadFile = File(...)):
         "characters_extracted": characters_extracted,
         "chunks_created": len(chunks),
         "already_exists": False
+    }
+
+@app.get("/textbooks/{textbook_id}/search")
+def search_textbook_chunks(
+    textbook_id: int,
+    query: str
+):
+    results = search_textbook(
+        textbook_id=textbook_id,
+        query=query
+    )
+
+    return {
+        "query": query,
+        "textbook_id": textbook_id,
+        "results": results
     }

@@ -12,6 +12,7 @@ textbooks/
 
 # Vector database
 vector_store/
+backend/vector_store/
 
 # Frontend
 node_modules/
