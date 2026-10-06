@@ -24,6 +24,8 @@ from backend.vector_store import (
 )
 from backend.tutor import generate_tutor_response
 
+#connects to the frontend here
+from fastapi.middleware.cors import CORSMiddleware
 
 class AskRequest(BaseModel):
     question: str
@@ -34,6 +36,15 @@ class CreateChatRequest(BaseModel):
 
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 UPLOAD_FOLDER = Path(__file__).resolve().parent / "uploads"
 UPLOAD_FOLDER.mkdir(exist_ok=True)
