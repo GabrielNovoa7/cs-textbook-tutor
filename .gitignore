@@ -1,0 +1,21 @@
+# Python
+backend/venv/
+__pycache__/
+*.pyc
+
+# Environment variables / API keys
+.env
+
+# Uploaded textbooks
+uploads/
+textbooks/
+
+# Vector database
+vector_store/
+
+# Frontend
+node_modules/
+.next/
+
+# VS Code
+.vscode/
