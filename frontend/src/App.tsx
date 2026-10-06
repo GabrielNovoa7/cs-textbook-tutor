@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import Editor from "@monaco-editor/react";
+
 type Section = "library" | "chats" | "practice" | "progress";
 type View = "dashboard" | "study";
 
@@ -47,7 +49,29 @@ function App() {
   const [sending, setSending] = useState(false);
   const [openingStudy, setOpeningStudy] = useState<number | null>(null);
 
+  const [showCodePanel, setShowCodePanel] = useState(false);
+  const [runningCode, setRunningCode] = useState(false);
+
+  const [reviewingCode, setReviewingCode] = useState(false);
+
+const [code, setCode] = useState(`public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello from Java!");
+    }
+}`);
+
+const [codeOutput, setCodeOutput] = useState(
+  "Run your code to see output here."
+);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+  messagesEndRef.current?.scrollIntoView({
+    behavior: "smooth",
+  });
+}, [messages, sending]);
 
   async function loadTextbooks() {
     try {
@@ -245,6 +269,115 @@ function App() {
     }
   }
 
+  async function runCode() {
+  if (!code.trim()) {
+    setCodeOutput("Write some Java code first.");
+    return;
+  }
+
+  setRunningCode(true);
+  setCodeOutput("Running...");
+
+  try {
+    const response = await fetch(
+      "http://127.0.0.1:8000/run-code",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          code: code,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Code execution failed.");
+    }
+
+    const result = await response.json();
+
+    setCodeOutput(
+      result.output || "Program finished with no output."
+    );
+  } catch (error) {
+    console.error(error);
+
+    setCodeOutput(
+      "Could not run the code. Make sure the backend is running."
+    );
+  } finally {
+    setRunningCode(false);
+  }
+}
+
+async function askTutorAboutCode() {
+  if (!currentChatId) {
+    setCodeOutput("Open a study session first.");
+    return;
+  }
+
+  if (!code.trim()) {
+    setCodeOutput("Write some Java code first.");
+    return;
+  }
+
+  setReviewingCode(true);
+
+  const tutorQuestion = `
+Please help me understand my Java code.
+
+Do not immediately rewrite the entire solution for me.
+Explain what I did correctly, what is wrong, and guide me toward fixing it.
+
+MY CODE:
+
+\`\`\`java
+${code}
+\`\`\`
+
+PROGRAM / COMPILER OUTPUT:
+
+\`\`\`text
+${codeOutput}
+\`\`\`
+
+Please connect your explanation to the textbook when relevant.
+`;
+
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:8000/chats/${currentChatId}/ask`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question: tutorQuestion,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Tutor code review failed.");
+    }
+
+    await response.json();
+
+    await loadMessages(currentChatId);
+  } catch (error) {
+    console.error(error);
+
+    setCodeOutput(
+      "Could not ask the tutor about your code."
+    );
+  } finally {
+    setReviewingCode(false);
+  }
+}
+
   function handleMessageKeyDown(
     event: React.KeyboardEvent<HTMLTextAreaElement>
   ) {
@@ -272,6 +405,12 @@ function App() {
           >
             ← Library
           </button>
+          <button
+  className="code-toggle-button"
+  onClick={() => setShowCodePanel(!showCodePanel)}
+>
+  {showCodePanel ? "Close Code" : "</> Code Playground"}
+</button>
 
           <div className="study-book-info">
             <p className="eyebrow">Studying</p>
@@ -279,8 +418,14 @@ function App() {
           </div>
         </header>
 
-        <main className="study-layout">
-          <section className="study-chat">
+        <main
+  className={
+    showCodePanel
+      ? "study-layout code-open"
+      : "study-layout"
+  }
+>
+  <section className="study-chat">
             <div className="messages">
               {messages.length === 0 ? (
                 <div className="empty-chat">
@@ -339,12 +484,18 @@ function App() {
                     </span>
 
                     <div className="message-content">
-                      Thinking...
+                      <span className="thinking-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </span>
                     </div>
                   </div>
                 </div>
               )}
             </div>
+
+            <div ref={messagesEndRef} />
 
             <div className="chat-input-area">
               <textarea
@@ -372,6 +523,77 @@ function App() {
               Press Enter to send · Shift + Enter for a new line
             </p>
           </section>
+          {showCodePanel && (
+  <aside className="code-panel">
+    <div className="code-panel-header">
+      <div>
+        <p className="eyebrow">Playground</p>
+        <h3>Java Editor</h3>
+      </div>
+
+      <button
+        className="reset-code-button"
+        onClick={() =>
+          setCode(`public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello from Java!");
+    }
+}`)
+        }
+      >
+        Reset
+      </button>
+    </div>
+
+    <div className="editor-container">
+      <Editor
+        height="100%"
+        defaultLanguage="java"
+        language="java"
+        theme="vs-dark"
+        value={code}
+        onChange={(value) => setCode(value ?? "")}
+        options={{
+          minimap: {
+            enabled: false,
+          },
+          fontSize: 14,
+          automaticLayout: true,
+          scrollBeyondLastLine: false,
+          wordWrap: "on",
+        }}
+      />
+    </div>
+
+    <div className="code-actions">
+      <button
+  className="run-code-button"
+  onClick={runCode}
+  disabled={runningCode}
+>
+  {runningCode ? "Running..." : "▶ Run"}
+</button>
+
+     <button
+  className="ask-code-button"
+  onClick={askTutorAboutCode}
+  disabled={reviewingCode}
+>
+  {reviewingCode
+    ? "Reviewing..."
+    : "Ask Tutor About My Code"}
+</button>
+    </div>
+
+    <div className="output-panel">
+      <div className="output-header">
+        Output
+      </div>
+
+      <pre>{codeOutput}</pre>
+    </div>
+  </aside>
+)}
         </main>
       </div>
     );

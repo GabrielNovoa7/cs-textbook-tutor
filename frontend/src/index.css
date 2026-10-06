@@ -638,7 +638,7 @@ button {
 }
 
 .message {
-  max-width: 75%;
+  max-width: 85%;
 
   padding: 16px 18px;
 
@@ -861,4 +861,207 @@ button {
 
   background: #151b24;
   color: #b7c0cd;
+}
+/* Tutor thinking animation */
+
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+
+  height: 20px;
+}
+
+.thinking-dots span {
+  width: 6px;
+  height: 6px;
+
+  border-radius: 50%;
+
+  background: #8a96a6;
+
+  animation: thinking-bounce 1.2s infinite ease-in-out;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes thinking-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+/* Code Playground */
+
+.code-toggle-button {
+  padding: 9px 13px;
+
+  border: 1px solid #2c3a50;
+  border-radius: 9px;
+
+  background: #172033;
+  color: #dbe7ff;
+
+  cursor: pointer;
+}
+
+.code-toggle-button:hover {
+  background: #202d45;
+}
+
+.study-layout.code-open {
+  max-width: 1500px;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.8fr);
+  gap: 24px;
+}
+
+.code-panel {
+  height: calc(100vh - 130px);
+
+  position: sticky;
+  top: 100px;
+
+  display: flex;
+  flex-direction: column;
+
+  overflow: hidden;
+
+  border: 1px solid #262f3b;
+  border-radius: 16px;
+
+  background: #0f141b;
+}
+
+.code-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 16px 18px;
+
+  border-bottom: 1px solid #252d38;
+}
+
+.code-panel-header h3 {
+  margin: 4px 0 0;
+}
+
+.reset-code-button {
+  padding: 7px 11px;
+
+  border: 1px solid #303a48;
+  border-radius: 8px;
+
+  background: transparent;
+  color: #adb7c4;
+
+  cursor: pointer;
+}
+
+.editor-container {
+  flex: 1;
+
+  min-height: 300px;
+}
+
+.code-actions {
+  display: flex;
+  gap: 10px;
+
+  padding: 12px;
+
+  border-top: 1px solid #242c36;
+}
+
+.run-code-button {
+  padding: 10px 18px;
+
+  border: none;
+  border-radius: 9px;
+
+  background: #2563eb;
+  color: white;
+
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.ask-code-button {
+  padding: 10px 14px;
+
+  border: 1px solid #303b4c;
+  border-radius: 9px;
+
+  background: #171e28;
+  color: #d7dee8;
+
+  cursor: pointer;
+}
+
+.output-panel {
+  max-height: 200px;
+
+  overflow: auto;
+
+  border-top: 1px solid #242c36;
+
+  background: #090c11;
+}
+
+.output-header {
+  padding: 9px 13px;
+
+  border-bottom: 1px solid #202630;
+
+  color: #808b9b;
+
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.output-panel pre {
+  margin: 0;
+
+  padding: 14px;
+
+  color: #dce5ef;
+
+  font-family:
+    "Cascadia Code",
+    Consolas,
+    monospace;
+
+  white-space: pre-wrap;
+}
+
+@media (max-width: 1100px) {
+  .study-layout.code-open {
+    display: block;
+  }
+
+  .code-panel {
+    position: static;
+
+    height: 650px;
+
+    margin-top: 24px;
+  }
 }

@@ -26,6 +26,8 @@ from backend.tutor import generate_tutor_response
 
 #connects to the frontend here
 from fastapi.middleware.cors import CORSMiddleware
+#connecst this endpoint to the code editor/code playground
+from backend.code_runner import run_java_code
 
 class AskRequest(BaseModel):
     question: str
@@ -33,6 +35,9 @@ class AskRequest(BaseModel):
 
 class CreateChatRequest(BaseModel):
     title: str
+
+class CodeRunRequest(BaseModel):
+    code: str
 
 
 app = FastAPI()
@@ -287,3 +292,13 @@ def ask_chat(
         "question": request.question,
         "answer": answer
     }
+
+@app.post("/run-code")
+def run_code(request: CodeRunRequest):
+    if len(request.code) > 20000:
+        raise HTTPException(
+            status_code=400,
+            detail="Code is too large."
+        )
+
+    return run_java_code(request.code)
