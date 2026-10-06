@@ -19,7 +19,11 @@ if not api_key:
 client = OpenAI(api_key=api_key)
 
 
-def generate_tutor_response(question, passages):
+def generate_tutor_response(
+    question,
+    passages,
+    chat_history=None
+):
     context_sections = []
 
     for passage in passages:
@@ -32,6 +36,20 @@ PAGE {passage["page_number"]}
         )
 
     textbook_context = "\n\n---\n\n".join(context_sections)
+
+    history_sections = []
+
+    if chat_history:
+        for message in chat_history[-10:]:
+            role = message["role"].upper()
+
+            history_sections.append(
+                f"{role}: {message['content']}"
+            )
+
+    conversation_history = "\n\n".join(
+        history_sections
+    )
 
     response = client.responses.create(
         model="gpt-6-luna",
@@ -56,7 +74,12 @@ Follow these rules:
 """,
 
         input=f"""
-STUDENT QUESTION:
+PREVIOUS CONVERSATION:
+
+{conversation_history}
+
+
+CURRENT STUDENT QUESTION:
 
 {question}
 

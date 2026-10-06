@@ -45,6 +45,34 @@ def init_db():
         )
     """)
 
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS chats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            textbook_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (textbook_id)
+                REFERENCES textbooks(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (chat_id)
+                REFERENCES chats(id)
+                ON DELETE CASCADE
+        )
+    """)
+
     connection.commit()
     connection.close()
 
@@ -145,3 +173,119 @@ def get_textbooks():
     connection.close()
 
     return [dict(textbook) for textbook in textbooks]
+
+def create_chat(textbook_id, title):
+    connection = get_connection()
+
+    cursor = connection.execute(
+        """
+        INSERT INTO chats (textbook_id, title)
+        VALUES (?, ?)
+        """,
+        (textbook_id, title)
+    )
+
+    chat_id = cursor.lastrowid
+
+    connection.commit()
+    connection.close()
+
+    return chat_id
+
+
+def get_chats(textbook_id):
+    connection = get_connection()
+
+    chats = connection.execute(
+        """
+        SELECT
+            id,
+            textbook_id,
+            title,
+            created_at,
+            updated_at
+        FROM chats
+        WHERE textbook_id = ?
+        ORDER BY updated_at DESC
+        """,
+        (textbook_id,)
+    ).fetchall()
+
+    connection.close()
+
+    return [dict(chat) for chat in chats]
+
+
+def get_chat(chat_id):
+    connection = get_connection()
+
+    chat = connection.execute(
+        """
+        SELECT *
+        FROM chats
+        WHERE id = ?
+        """,
+        (chat_id,)
+    ).fetchone()
+
+    connection.close()
+
+    if chat:
+        return dict(chat)
+
+    return None
+
+
+def save_message(chat_id, role, content):
+    connection = get_connection()
+
+    cursor = connection.execute(
+        """
+        INSERT INTO messages (
+            chat_id,
+            role,
+            content
+        )
+        VALUES (?, ?, ?)
+        """,
+        (chat_id, role, content)
+    )
+
+    message_id = cursor.lastrowid
+
+    connection.execute(
+        """
+        UPDATE chats
+        SET updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (chat_id,)
+    )
+
+    connection.commit()
+    connection.close()
+
+    return message_id
+
+
+def get_messages(chat_id):
+    connection = get_connection()
+
+    messages = connection.execute(
+        """
+        SELECT
+            id,
+            chat_id,
+            role,
+            content,
+            created_at
+        FROM messages
+        WHERE chat_id = ?
+        ORDER BY id ASC
+        """,
+        (chat_id,)
+    ).fetchall()
+
+    connection.close()
+
+    return [dict(message) for message in messages]

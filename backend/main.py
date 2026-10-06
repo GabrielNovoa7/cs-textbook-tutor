@@ -11,7 +11,12 @@ from backend.database import (
     init_db,
     get_textbook_by_hash,
     save_textbook,
-    get_textbooks
+    get_textbooks,
+    create_chat,
+    get_chats,
+    get_chat,
+    save_message,
+    get_messages
 )
 from backend.vector_store import (
     add_textbook_chunks,
@@ -22,6 +27,10 @@ from backend.tutor import generate_tutor_response
 
 class AskRequest(BaseModel):
     question: str
+
+
+class CreateChatRequest(BaseModel):
+    title: str
 
 
 app = FastAPI()
@@ -173,4 +182,97 @@ def ask_textbook(
         "question": request.question,
         "answer": answer,
         "sources": sources
+    }
+
+
+@app.post("/textbooks/{textbook_id}/chats")
+def create_textbook_chat(
+    textbook_id: int,
+    request: CreateChatRequest
+):
+    chat_id = create_chat(
+        textbook_id=textbook_id,
+        title=request.title
+    )
+
+    return {
+        "chat_id": chat_id,
+        "textbook_id": textbook_id,
+        "title": request.title
+    }
+
+
+@app.get("/textbooks/{textbook_id}/chats")
+def list_textbook_chats(textbook_id: int):
+    return get_chats(textbook_id)
+
+
+@app.get("/chats/{chat_id}/messages")
+def list_chat_messages(chat_id: int):
+    return get_messages(chat_id)
+
+
+@app.post("/chats/{chat_id}/ask")
+def ask_chat(
+    chat_id: int,
+    request: AskRequest
+):
+    chat = get_chat(chat_id)
+
+    if not chat:
+        raise HTTPException(
+            status_code=404,
+            detail="Chat was not found."
+        )
+
+    history = get_messages(chat_id)
+
+    search_query = request.question
+
+    previous_user_messages = [
+        message["content"]
+        for message in history
+        if message["role"] == "user"
+    ]
+
+    if previous_user_messages:
+        search_query = (
+            f"{previous_user_messages[-1]}\n"
+            f"Follow-up question: {request.question}"
+        )
+
+    passages = search_textbook(
+        textbook_id=chat["textbook_id"],
+        query=search_query,
+        results=5
+    )
+
+    if not passages:
+        raise HTTPException(
+            status_code=404,
+            detail="No relevant textbook content was found."
+        )
+
+    answer = generate_tutor_response(
+        question=request.question,
+        passages=passages,
+        chat_history=history
+    )
+
+    save_message(
+        chat_id=chat_id,
+        role="user",
+        content=request.question
+    )
+
+    save_message(
+        chat_id=chat_id,
+        role="assistant",
+        content=answer
+    )
+
+    return {
+        "chat_id": chat_id,
+        "question": request.question,
+        "answer": answer
     }
