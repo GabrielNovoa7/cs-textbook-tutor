@@ -17,11 +17,13 @@ def chunk_pages(pages, chunk_size=1500, overlap=250):
             chunk_text = text[start:end].strip()
 
             if chunk_text:
-                chunks.append({
-                    "chunk_id": chunk_id,
-                    "page_number": page["page_number"],
-                    "text": chunk_text
-                })
+                chunks.append(
+                    {
+                        "chunk_id": chunk_id,
+                        "page_number": page["page_number"],
+                        "text": chunk_text,
+                    }
+                )
 
                 chunk_id += 1
 

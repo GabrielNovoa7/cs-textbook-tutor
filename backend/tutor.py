@@ -4,7 +4,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
-
 ENV_PATH = Path(__file__).resolve().parent / ".env"
 
 load_dotenv(ENV_PATH)
@@ -12,28 +11,20 @@ load_dotenv(ENV_PATH)
 api_key = os.getenv("OPENAI_API_KEY")
 
 if not api_key:
-    raise RuntimeError(
-        "OPENAI_API_KEY was not found in backend/.env"
-    )
+    raise RuntimeError("OPENAI_API_KEY was not found in backend/.env")
 
 client = OpenAI(api_key=api_key)
 
 
-def generate_tutor_response(
-    question,
-    passages,
-    chat_history=None
-):
+def generate_tutor_response(question, passages, chat_history=None):
     context_sections = []
 
     for passage in passages:
-        context_sections.append(
-            f"""
+        context_sections.append(f"""
 PAGE {passage["page_number"]}
 
 {passage["text"]}
-"""
-        )
+""")
 
     textbook_context = "\n\n---\n\n".join(context_sections)
 
@@ -43,17 +34,12 @@ PAGE {passage["page_number"]}
         for message in chat_history[-10:]:
             role = message["role"].upper()
 
-            history_sections.append(
-                f"{role}: {message['content']}"
-            )
+            history_sections.append(f"{role}: {message['content']}")
 
-    conversation_history = "\n\n".join(
-        history_sections
-    )
+    conversation_history = "\n\n".join(history_sections)
 
     response = client.responses.create(
         model="gpt-6-luna",
-
         instructions="""
 You are an interactive computer science textbook tutor.
 
@@ -72,7 +58,6 @@ Follow these rules:
 8. For practice problems, guide the student before giving the complete answer unless they explicitly ask for it.
 9. Encourage understanding instead of memorization.
 """,
-
         input=f"""
 PREVIOUS CONVERSATION:
 
@@ -87,7 +72,7 @@ CURRENT STUDENT QUESTION:
 RETRIEVED TEXTBOOK CONTEXT:
 
 {textbook_context}
-"""
+""",
     )
 
     return response.output_text

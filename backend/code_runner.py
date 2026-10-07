@@ -2,7 +2,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-
 MAX_OUTPUT_LENGTH = 10000
 
 
@@ -19,36 +18,29 @@ def run_java_code(code: str):
                 cwd=temp_path,
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
         except subprocess.TimeoutExpired:
-            return {
-                "status": "error",
-                "output": "Compilation timed out."
-            }
+            return {"status": "error", "output": "Compilation timed out."}
 
         if compile_result.returncode != 0:
             return {
                 "status": "compile_error",
-                "output": compile_result.stderr[:MAX_OUTPUT_LENGTH]
+                "output": compile_result.stderr[:MAX_OUTPUT_LENGTH],
             }
 
         try:
             run_result = subprocess.run(
-                [
-                    "java",
-                    "-Xmx64m",
-                    "Main"
-                ],
+                ["java", "-Xmx64m", "Main"],
                 cwd=temp_path,
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
         except subprocess.TimeoutExpired:
             return {
                 "status": "timeout",
-                "output": "Program stopped because it ran for more than 5 seconds."
+                "output": "Program stopped because it ran for more than 5 seconds.",
             }
 
         output = run_result.stdout
@@ -58,5 +50,5 @@ def run_java_code(code: str):
 
         return {
             "status": "success" if run_result.returncode == 0 else "runtime_error",
-            "output": output[:MAX_OUTPUT_LENGTH]
+            "output": output[:MAX_OUTPUT_LENGTH],
         }

@@ -1,23 +1,15 @@
 import sqlite3
 from pathlib import Path
 
-
-DB_PATH = (
-    Path(__file__).resolve().parent
-    / "tutor.db"
-)
+DB_PATH = Path(__file__).resolve().parent / "tutor.db"
 
 
 def get_connection():
-    connection = sqlite3.connect(
-        DB_PATH
-    )
+    connection = sqlite3.connect(DB_PATH)
 
     connection.row_factory = sqlite3.Row
 
-    connection.execute(
-        "PRAGMA foreign_keys = ON"
-    )
+    connection.execute("PRAGMA foreign_keys = ON")
 
     return connection
 
@@ -170,7 +162,7 @@ def get_textbook_by_hash(file_hash):
         FROM textbooks
         WHERE file_hash = ?
         """,
-        (file_hash,)
+        (file_hash,),
     ).fetchone()
 
     connection.close()
@@ -190,7 +182,7 @@ def get_textbook(textbook_id):
         FROM textbooks
         WHERE id = ?
         """,
-        (textbook_id,)
+        (textbook_id,),
     ).fetchone()
 
     connection.close()
@@ -202,12 +194,7 @@ def get_textbook(textbook_id):
 
 
 def save_textbook(
-    filename,
-    stored_filename,
-    file_hash,
-    page_count,
-    characters_extracted,
-    chunks
+    filename, stored_filename, file_hash, page_count, characters_extracted, chunks
 ):
     connection = get_connection()
 
@@ -223,24 +210,13 @@ def save_textbook(
             )
             VALUES (?, ?, ?, ?, ?)
             """,
-            (
-                filename,
-                stored_filename,
-                file_hash,
-                page_count,
-                characters_extracted
-            )
+            (filename, stored_filename, file_hash, page_count, characters_extracted),
         )
 
         textbook_id = cursor.lastrowid
 
         chunk_rows = [
-            (
-                textbook_id,
-                chunk["chunk_id"],
-                chunk["page_number"],
-                chunk["text"]
-            )
+            (textbook_id, chunk["chunk_id"], chunk["page_number"], chunk["text"])
             for chunk in chunks
         ]
 
@@ -254,7 +230,7 @@ def save_textbook(
             )
             VALUES (?, ?, ?, ?)
             """,
-            chunk_rows
+            chunk_rows,
         )
 
         connection.commit()
@@ -272,8 +248,7 @@ def save_textbook(
 def get_textbooks():
     connection = get_connection()
 
-    textbooks = connection.execute(
-        """
+    textbooks = connection.execute("""
         SELECT
             id,
             filename,
@@ -282,15 +257,11 @@ def get_textbooks():
             uploaded_at
         FROM textbooks
         ORDER BY uploaded_at DESC
-        """
-    ).fetchall()
+        """).fetchall()
 
     connection.close()
 
-    return [
-        dict(textbook)
-        for textbook in textbooks
-    ]
+    return [dict(textbook) for textbook in textbooks]
 
 
 # =====================================================
@@ -298,10 +269,7 @@ def get_textbooks():
 # =====================================================
 
 
-def save_learning_path(
-    textbook_id,
-    chapters
-):
+def save_learning_path(textbook_id, chapters):
     """
     Saves the cleaned chapter/section structure
     for one textbook.
@@ -322,7 +290,7 @@ def save_learning_path(
             DELETE FROM chapters
             WHERE textbook_id = ?
             """,
-            (textbook_id,)
+            (textbook_id,),
         )
 
         chapter_count = 0
@@ -345,26 +313,16 @@ def save_learning_path(
                     textbook_id,
                     chapter["number"],
                     chapter["title"],
-                    chapter.get(
-                        "book_page"
-                    ),
-                    chapter.get(
-                        "toc_pdf_page"
-                    ),
-                    chapter.get(
-                        "confidence",
-                        "direct"
-                    )
-                )
+                    chapter.get("book_page"),
+                    chapter.get("toc_pdf_page"),
+                    chapter.get("confidence", "direct"),
+                ),
             )
 
             chapter_id = cursor.lastrowid
             chapter_count += 1
 
-            for section in chapter.get(
-                "sections",
-                []
-            ):
+            for section in chapter.get("sections", []):
                 connection.execute(
                     """
                     INSERT INTO sections (
@@ -381,31 +339,17 @@ def save_learning_path(
                         chapter_id,
                         section["number"],
                         section["title"],
-                        section.get(
-                            "book_page"
-                        ),
-                        section.get(
-                            "toc_pdf_page"
-                        ),
-                        section.get(
-                            "confidence",
-                            "direct"
-                        )
-                    )
+                        section.get("book_page"),
+                        section.get("toc_pdf_page"),
+                        section.get("confidence", "direct"),
+                    ),
                 )
 
                 section_count += 1
 
         connection.commit()
 
-        return {
-            "chapters_saved": (
-                chapter_count
-            ),
-            "sections_saved": (
-                section_count
-            )
-        }
+        return {"chapters_saved": (chapter_count), "sections_saved": (section_count)}
 
     except Exception:
         connection.rollback()
@@ -415,9 +359,7 @@ def save_learning_path(
         connection.close()
 
 
-def get_learning_path(
-    textbook_id
-):
+def get_learning_path(textbook_id):
     connection = get_connection()
 
     chapter_rows = connection.execute(
@@ -435,15 +377,13 @@ def get_learning_path(
         ORDER BY
             CAST(chapter_number AS INTEGER)
         """,
-        (textbook_id,)
+        (textbook_id,),
     ).fetchall()
 
     chapters = []
 
     for chapter_row in chapter_rows:
-        chapter = dict(
-            chapter_row
-        )
+        chapter = dict(chapter_row)
 
         section_rows = connection.execute(
             """
@@ -461,30 +401,19 @@ def get_learning_path(
                 book_page ASC,
                 id ASC
             """,
-            (
-                chapter[
-                    "id"
-                ],
-            )
+            (chapter["id"],),
         ).fetchall()
 
-        chapter["sections"] = [
-            dict(section)
-            for section in section_rows
-        ]
+        chapter["sections"] = [dict(section) for section in section_rows]
 
-        chapters.append(
-            chapter
-        )
+        chapters.append(chapter)
 
     connection.close()
 
     return chapters
 
 
-def learning_path_exists(
-    textbook_id
-):
+def learning_path_exists(textbook_id):
     connection = get_connection()
 
     result = connection.execute(
@@ -493,14 +422,12 @@ def learning_path_exists(
         FROM chapters
         WHERE textbook_id = ?
         """,
-        (textbook_id,)
+        (textbook_id,),
     ).fetchone()
 
     connection.close()
 
-    return (
-        result["total"] > 0
-    )
+    return result["total"] > 0
 
 
 # =====================================================
@@ -508,10 +435,7 @@ def learning_path_exists(
 # =====================================================
 
 
-def create_chat(
-    textbook_id,
-    title
-):
+def create_chat(textbook_id, title):
     connection = get_connection()
 
     cursor = connection.execute(
@@ -522,10 +446,7 @@ def create_chat(
         )
         VALUES (?, ?)
         """,
-        (
-            textbook_id,
-            title
-        )
+        (textbook_id, title),
     )
 
     chat_id = cursor.lastrowid
@@ -536,9 +457,7 @@ def create_chat(
     return chat_id
 
 
-def get_chats(
-    textbook_id
-):
+def get_chats(textbook_id):
     connection = get_connection()
 
     chats = connection.execute(
@@ -553,20 +472,15 @@ def get_chats(
         WHERE textbook_id = ?
         ORDER BY updated_at DESC
         """,
-        (textbook_id,)
+        (textbook_id,),
     ).fetchall()
 
     connection.close()
 
-    return [
-        dict(chat)
-        for chat in chats
-    ]
+    return [dict(chat) for chat in chats]
 
 
-def get_chat(
-    chat_id
-):
+def get_chat(chat_id):
     connection = get_connection()
 
     chat = connection.execute(
@@ -575,7 +489,7 @@ def get_chat(
         FROM chats
         WHERE id = ?
         """,
-        (chat_id,)
+        (chat_id,),
     ).fetchone()
 
     connection.close()
@@ -586,11 +500,7 @@ def get_chat(
     return None
 
 
-def save_message(
-    chat_id,
-    role,
-    content
-):
+def save_message(chat_id, role, content):
     connection = get_connection()
 
     cursor = connection.execute(
@@ -602,16 +512,10 @@ def save_message(
         )
         VALUES (?, ?, ?)
         """,
-        (
-            chat_id,
-            role,
-            content
-        )
+        (chat_id, role, content),
     )
 
-    message_id = (
-        cursor.lastrowid
-    )
+    message_id = cursor.lastrowid
 
     connection.execute(
         """
@@ -620,7 +524,7 @@ def save_message(
             CURRENT_TIMESTAMP
         WHERE id = ?
         """,
-        (chat_id,)
+        (chat_id,),
     )
 
     connection.commit()
@@ -629,9 +533,7 @@ def save_message(
     return message_id
 
 
-def get_messages(
-    chat_id
-):
+def get_messages(chat_id):
     connection = get_connection()
 
     messages = connection.execute(
@@ -646,19 +548,15 @@ def get_messages(
         WHERE chat_id = ?
         ORDER BY id ASC
         """,
-        (chat_id,)
+        (chat_id,),
     ).fetchall()
 
     connection.close()
 
-    return [
-        dict(message)
-        for message in messages
-    ]
+    return [dict(message) for message in messages]
 
-def get_section_context(
-    section_id
-):
+
+def get_section_context(section_id):
     connection = get_connection()
 
     row = connection.execute(
@@ -690,7 +588,7 @@ def get_section_context(
 
         WHERE s.id = ?
         """,
-        (section_id,)
+        (section_id,),
     ).fetchone()
 
     if not row:
@@ -718,17 +616,10 @@ def get_section_context(
 
         LIMIT 1
         """,
-        (
-            context["chapter_id"],
-            section_id
-        )
+        (context["chapter_id"], section_id),
     ).fetchone()
 
-    context["next_section"] = (
-        dict(next_section)
-        if next_section
-        else None
-    )
+    context["next_section"] = dict(next_section) if next_section else None
 
     next_chapter = connection.execute(
         """
@@ -755,17 +646,10 @@ def get_section_context(
 
         LIMIT 1
         """,
-        (
-            context["textbook_id"],
-            context["chapter_number"]
-        )
+        (context["textbook_id"], context["chapter_number"]),
     ).fetchone()
 
-    context["next_chapter"] = (
-        dict(next_chapter)
-        if next_chapter
-        else None
-    )
+    context["next_chapter"] = dict(next_chapter) if next_chapter else None
 
     connection.close()
 
