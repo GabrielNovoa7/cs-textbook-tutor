@@ -36,6 +36,8 @@ from backend.database import (
     get_chat,
     save_message,
     get_messages,
+    get_section_progress,
+    mark_reading_complete,
 )
 
 from backend.lesson_source import build_section_source
@@ -330,6 +332,26 @@ def get_section_lesson_source(section_id: int):
         "pdf_url": (f"/textbooks/" f"{context['textbook_id']}" f"/pdf"),
         **source,
     }
+
+
+@app.get("/sections/{section_id}/progress")
+def read_section_progress(section_id: int):
+    context = get_section_context(section_id)
+
+    if not context:
+        raise HTTPException(status_code=404, detail="Section was not found.")
+
+    return get_section_progress(section_id)
+
+
+@app.post("/sections/{section_id}/progress/reading-complete")
+def complete_section_reading(section_id: int):
+    progress = mark_reading_complete(section_id)
+
+    if not progress:
+        raise HTTPException(status_code=404, detail="Section was not found.")
+
+    return {"message": "Reading completed.", "progress": progress}
 
 
 # =====================================================

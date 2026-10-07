@@ -206,7 +206,11 @@ button {
   border-radius: 18px;
 
   background:
-    radial-gradient(circle at top right, rgba(37, 99, 235, 0.16), transparent 35%),
+    radial-gradient(
+      circle at top right,
+      rgba(37, 99, 235, 0.16),
+      transparent 35%
+    ),
     #11161d;
 }
 
@@ -789,10 +793,7 @@ button {
   background: #202733;
   color: #a8c7ff;
 
-  font-family:
-    "Cascadia Code",
-    "Consolas",
-    monospace;
+  font-family: "Cascadia Code", "Consolas", monospace;
 
   font-size: 0.9em;
 }
@@ -1044,10 +1045,7 @@ button {
 
   color: #dce5ef;
 
-  font-family:
-    "Cascadia Code",
-    Consolas,
-    monospace;
+  font-family: "Cascadia Code", Consolas, monospace;
 
   white-space: pre-wrap;
 }
@@ -1097,7 +1095,6 @@ button {
   transform: translateY(-1px);
 }
 
-
 .learning-path-hero {
   display: flex;
   align-items: center;
@@ -1110,12 +1107,11 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 20px;
 
-  background:
-    linear-gradient(
-      135deg,
-      rgba(35, 63, 110, 0.35),
-      rgba(21, 28, 43, 0.5)
-    );
+  background: linear-gradient(
+    135deg,
+    rgba(35, 63, 110, 0.35),
+    rgba(21, 28, 43, 0.5)
+  );
 }
 
 .learning-path-hero h3 {
@@ -1144,7 +1140,6 @@ button {
 
   font-size: 36px;
 }
-
 
 .path-course-header {
   padding: 28px;
@@ -1183,7 +1178,6 @@ button {
   color: #9aa6b8;
 }
 
-
 .overall-progress {
   margin-top: 25px;
 }
@@ -1220,17 +1214,12 @@ button {
 .progress-fill {
   height: 100%;
 
-  background: linear-gradient(
-    90deg,
-    #4c8cff,
-    #7e67ff
-  );
+  background: linear-gradient(90deg, #4c8cff, #7e67ff);
 
   border-radius: inherit;
 
   transition: width 0.3s ease;
 }
-
 
 .chapter-roadmap {
   max-width: 1000px;
@@ -1249,22 +1238,18 @@ button {
   color: #96a3b7;
 }
 
-
 .chapter-list {
   display: flex;
   flex-direction: column;
 }
 
-
 .chapter-card {
   display: grid;
 
-  grid-template-columns:
-    60px minmax(0, 1fr);
+  grid-template-columns: 60px minmax(0, 1fr);
 
   position: relative;
 }
-
 
 .chapter-path-marker {
   display: flex;
@@ -1273,7 +1258,6 @@ button {
 
   position: relative;
 }
-
 
 .chapter-number-circle {
   width: 43px;
@@ -1293,65 +1277,49 @@ button {
   z-index: 2;
 }
 
-
-.chapter-unlocked
-.chapter-number-circle {
+.chapter-unlocked .chapter-number-circle {
   background: #4c7eff;
   color: white;
 
-  box-shadow:
-    0 0 0 5px
-    rgba(76, 126, 255, 0.12);
+  box-shadow: 0 0 0 5px rgba(76, 126, 255, 0.12);
 }
 
-
-.chapter-locked
-.chapter-number-circle {
+.chapter-locked .chapter-number-circle {
   background: #202737;
   color: #788499;
 
-  border: 1px solid
-    rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
-
 
 .chapter-connector {
   width: 2px;
   min-height: 40px;
   flex: 1;
 
-  background:
-    rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.08);
 }
-
 
 .chapter-content {
   min-width: 0;
 
   margin-bottom: 18px;
 
-  border: 1px solid
-    rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 
   border-radius: 16px;
 
-  background:
-    rgba(17, 23, 35, 0.72);
+  background: rgba(17, 23, 35, 0.72);
 
   overflow: hidden;
 }
 
-
 .chapter-unlocked .chapter-content {
-  border-color:
-    rgba(76, 126, 255, 0.27);
+  border-color: rgba(76, 126, 255, 0.27);
 }
-
 
 .chapter-locked .chapter-content {
   opacity: 0.62;
 }
-
 
 .chapter-header-button {
   width: 100%;
@@ -1376,10 +1344,8 @@ button {
 }
 
 .chapter-header-button:not(:disabled):hover {
-  background:
-    rgba(255, 255, 255, 0.025);
+  background: rgba(255, 255, 255, 0.025);
 }
-
 
 .chapter-title-area {
   min-width: 0;
@@ -1410,7 +1376,6 @@ button {
   letter-spacing: 0.08em;
 }
 
-
 .chapter-status {
   display: flex;
   align-items: center;
@@ -1428,8 +1393,7 @@ button {
 
   border-radius: 999px;
 
-  background:
-    rgba(76, 126, 255, 0.13);
+  background: rgba(76, 126, 255, 0.13);
 
   color: #83a4ff;
 
@@ -1446,8 +1410,7 @@ button {
 
   border-radius: 999px;
 
-  background:
-    rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.05);
 
   color: #788499;
 
@@ -1460,21 +1423,15 @@ button {
   font-size: 12px;
 }
 
-
 .chapter-sections {
-  padding:
-    0 22px 22px;
+  padding: 0 22px 22px;
 
-  border-top:
-    1px solid
-    rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
-
 
 .chapter-progress-summary {
   margin-top: 18px;
 }
-
 
 .section-list {
   display: flex;
@@ -1484,27 +1441,22 @@ button {
   margin-top: 20px;
 }
 
-
 .learning-section-row {
   display: grid;
 
-  grid-template-columns:
-    35px minmax(0, 1fr) auto;
+  grid-template-columns: 35px minmax(0, 1fr) auto;
 
   gap: 12px;
   align-items: center;
 
   padding: 14px;
 
-  border: 1px solid
-    rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 
   border-radius: 12px;
 
-  background:
-    rgba(255, 255, 255, 0.025);
+  background: rgba(255, 255, 255, 0.025);
 }
-
 
 .section-status-dot {
   width: 30px;
@@ -1515,14 +1467,12 @@ button {
 
   border-radius: 50%;
 
-  background:
-    rgba(76, 126, 255, 0.1);
+  background: rgba(76, 126, 255, 0.1);
 
   color: #83a4ff;
 
   font-size: 11px;
 }
-
 
 .learning-section-info {
   min-width: 0;
@@ -1554,7 +1504,6 @@ button {
   font-size: 12px;
 }
 
-
 .chapter-coming-next {
   margin-top: 18px;
 
@@ -1562,12 +1511,9 @@ button {
 
   border-radius: 12px;
 
-  background:
-    rgba(76, 126, 255, 0.07);
+  background: rgba(76, 126, 255, 0.07);
 
-  border:
-    1px dashed
-    rgba(76, 126, 255, 0.25);
+  border: 1px dashed rgba(76, 126, 255, 0.25);
 }
 
 .chapter-coming-next span {
@@ -1588,19 +1534,16 @@ button {
   font-size: 13px;
 }
 
-
 .path-loading,
 .path-error,
 .placeholder-page {
   padding: 45px;
 
-  border: 1px solid
-    rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 
   border-radius: 18px;
 
-  background:
-    rgba(17, 23, 35, 0.65);
+  background: rgba(17, 23, 35, 0.65);
 
   text-align: center;
 }
@@ -1615,23 +1558,19 @@ button {
   color: #8e9bae;
 }
 
-
 .path-spinner {
   width: 32px;
   height: 32px;
 
   margin: 0 auto;
 
-  border: 3px solid
-    rgba(255, 255, 255, 0.1);
+  border: 3px solid rgba(255, 255, 255, 0.1);
 
-  border-top-color:
-    #6f93ff;
+  border-top-color: #6f93ff;
 
   border-radius: 50%;
 
-  animation:
-    path-spin 0.8s linear infinite;
+  animation: path-spin 0.8s linear infinite;
 }
 
 @keyframes path-spin {
@@ -1640,11 +1579,9 @@ button {
   }
 }
 
-
 .path-error {
   color: #ff9c9c;
 }
-
 
 .placeholder-icon {
   width: 55px;
@@ -1657,14 +1594,12 @@ button {
 
   border-radius: 14px;
 
-  background:
-    rgba(76, 126, 255, 0.12);
+  background: rgba(76, 126, 255, 0.12);
 
   color: #8aa8ff;
 
   font-weight: 800;
 }
-
 
 @media (max-width: 800px) {
   .learning-path-hero {
@@ -1673,8 +1608,7 @@ button {
   }
 
   .chapter-card {
-    grid-template-columns:
-      45px minmax(0, 1fr);
+    grid-template-columns: 45px minmax(0, 1fr);
   }
 
   .chapter-number-circle {
@@ -1692,8 +1626,7 @@ button {
   }
 
   .learning-section-row {
-    grid-template-columns:
-      30px minmax(0, 1fr);
+    grid-template-columns: 30px minmax(0, 1fr);
   }
 
   .section-row-status {
@@ -1720,9 +1653,7 @@ button {
 
   padding: 18px 30px;
 
-  border-bottom:
-    1px solid
-    rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 
   background: #10151f;
 }
@@ -1739,7 +1670,6 @@ button {
   overflow-wrap: anywhere;
 }
 
-
 .lesson-layout {
   max-width: 1200px;
 
@@ -1748,19 +1678,15 @@ button {
   padding: 32px;
 }
 
-
 .lesson-intro-card,
 .lesson-next-card {
   padding: 24px;
 
-  border:
-    1px solid
-    rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 
   border-radius: 18px;
 
-  background:
-    rgba(17, 23, 35, 0.75);
+  background: rgba(17, 23, 35, 0.75);
 
   margin-bottom: 24px;
 }
@@ -1775,7 +1701,6 @@ button {
   color: #98a5b8;
 }
 
-
 .lesson-reading-meta {
   display: flex;
   gap: 12px;
@@ -1789,19 +1714,15 @@ button {
 
   border-radius: 999px;
 
-  background:
-    rgba(76, 126, 255, 0.1);
+  background: rgba(76, 126, 255, 0.1);
 
   color: #9bb3ff;
 
   font-size: 13px;
 }
 
-
 .textbook-reader {
-  border:
-    1px solid
-    rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 
   border-radius: 18px;
 
@@ -1812,7 +1733,6 @@ button {
   margin-bottom: 24px;
 }
 
-
 .reader-header {
   display: flex;
   align-items: center;
@@ -1821,9 +1741,7 @@ button {
 
   padding: 18px 20px;
 
-  border-bottom:
-    1px solid
-    rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .reader-header strong {
@@ -1834,15 +1752,12 @@ button {
   overflow-wrap: anywhere;
 }
 
-
 .open-pdf-button {
   flex-shrink: 0;
 
   padding: 9px 13px;
 
-  border:
-    1px solid
-    rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 
   border-radius: 9px;
 
@@ -1850,10 +1765,8 @@ button {
 
   text-decoration: none;
 
-  background:
-    rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.04);
 }
-
 
 .pdf-reader {
   display: block;
@@ -1866,7 +1779,6 @@ button {
   background: #252525;
 }
 
-
 .lesson-loading {
   margin: 40px;
 
@@ -1876,7 +1788,6 @@ button {
 
   color: #9eabc0;
 }
-
 
 .learning-section-row {
   width: 100%;
@@ -1898,16 +1809,12 @@ button.lesson-ready-row {
 }
 
 button.lesson-ready-row:hover {
-  border-color:
-    rgba(76, 126, 255, 0.35);
+  border-color: rgba(76, 126, 255, 0.35);
 
-  background:
-    rgba(76, 126, 255, 0.055);
+  background: rgba(76, 126, 255, 0.055);
 
-  transform:
-    translateY(-1px);
+  transform: translateY(-1px);
 }
-
 
 @media (max-width: 800px) {
   .lesson-header {
@@ -1926,5 +1833,146 @@ button.lesson-ready-row:hover {
 
   .pdf-reader {
     height: 70vh;
+  }
+}
+/* =========================================
+   LESSON READING PROGRESS
+   ========================================= */
+
+.reading-completion-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+
+  padding: 22px 24px;
+  margin-bottom: 24px;
+
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+
+  background: rgba(17, 23, 35, 0.75);
+}
+
+.reading-completion-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.reading-completion-icon {
+  width: 48px;
+  height: 48px;
+
+  display: grid;
+  place-items: center;
+
+  flex-shrink: 0;
+
+  border-radius: 14px;
+
+  background: rgba(76, 126, 255, 0.12);
+
+  color: #8faaff;
+
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.reading-completion-content h3 {
+  margin: 4px 0 6px;
+}
+
+.reading-completion-content p:last-child {
+  margin: 0;
+
+  color: #909db0;
+
+  line-height: 1.5;
+}
+
+.complete-reading-button {
+  flex-shrink: 0;
+
+  border: none;
+  border-radius: 11px;
+
+  padding: 12px 18px;
+
+  background: #4c7eff;
+  color: white;
+
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.complete-reading-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.complete-reading-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.reading-complete-badge {
+  flex-shrink: 0;
+
+  padding: 9px 14px;
+
+  border-radius: 999px;
+
+  background: rgba(78, 201, 140, 0.12);
+
+  color: #73dbaa;
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.concept-locked {
+  opacity: 0.6;
+}
+
+.concept-unlocked {
+  border-color: rgba(76, 126, 255, 0.25);
+}
+
+.start-concept-button {
+  margin-top: 12px;
+
+  padding: 10px 15px;
+
+  border: 1px solid rgba(76, 126, 255, 0.35);
+  border-radius: 10px;
+
+  background: rgba(76, 126, 255, 0.1);
+
+  color: #9db4ff;
+
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+.start-concept-button:hover {
+  background: rgba(76, 126, 255, 0.16);
+}
+
+@media (max-width: 800px) {
+  .reading-completion-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .complete-reading-button,
+  .reading-complete-badge {
+    width: 100%;
+    text-align: center;
   }
 }

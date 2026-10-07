@@ -89,6 +89,16 @@ type LearningPathResponse = {
   chapters: LearningPathChapter[];
 };
 
+type SectionProgress = {
+  section_id: number;
+  reading_completed: number;
+  concept_check_completed: number;
+  activity_completed: number;
+  mastery_completed: number;
+  updated_at: string | null;
+  completed_at: string | null;
+};
+
 function App() {
   const [activeSection, setActiveSection] = useState<Section>("library");
 
@@ -127,6 +137,11 @@ function App() {
     }
 }`,
   );
+
+  const [sectionProgress, setSectionProgress] =
+    useState<SectionProgress | null>(null);
+
+  const [markingReadingComplete, setMarkingReadingComplete] = useState(false);
 
   const [codeOutput, setCodeOutput] = useState(
     "Run your code to see output here.",
@@ -330,6 +345,8 @@ function App() {
 
     setLessonSource(null);
 
+    setSectionProgress(null);
+
     setLessonError("");
 
     setLessonLoading(true);
@@ -337,27 +354,70 @@ function App() {
     setView("lesson");
 
     try {
-      const response = await fetch(
+      const lessonResponse = await fetch(
         `${API_BASE}/sections/${section.id}/lesson-source`,
       );
 
-      if (!response.ok) {
+      if (!lessonResponse.ok) {
         throw new Error("Could not load lesson.");
       }
 
-      const data: LessonSource = await response.json();
+      const lessonData: LessonSource = await lessonResponse.json();
 
-      if (data.error) {
-        throw new Error(data.error);
+      if (lessonData.error) {
+        throw new Error(lessonData.error);
       }
 
-      setLessonSource(data);
+      const progressResponse = await fetch(
+        `${API_BASE}/sections/${section.id}/progress`,
+      );
+
+      if (!progressResponse.ok) {
+        throw new Error("Could not load lesson progress.");
+      }
+
+      const progressData: SectionProgress = await progressResponse.json();
+
+      setLessonSource(lessonData);
+
+      setSectionProgress(progressData);
     } catch (error) {
       console.error(error);
 
       setLessonError("Could not load this lesson.");
     } finally {
       setLessonLoading(false);
+    }
+  }
+
+  async function completeReading() {
+    if (!selectedLearningSection) {
+      return;
+    }
+
+    setMarkingReadingComplete(true);
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/sections/${selectedLearningSection.id}/progress/reading-complete`,
+        {
+          method: "POST",
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Could not save reading progress.");
+      }
+
+      const data = await response.json();
+
+      setSectionProgress(data.progress);
+    } catch (error) {
+      console.error(error);
+
+      setLessonError("Could not save your reading progress.");
+    } finally {
+      setMarkingReadingComplete(false);
     }
   }
 
@@ -938,15 +998,66 @@ Please connect your explanation to the textbook when relevant.
               </section>
             )}
 
-            <section className="lesson-next-card">
-              <p className="eyebrow">Next Step</p>
+            <section className="reading-completion-card">
+              <div className="reading-completion-content">
+                <div className="reading-completion-icon">
+                  {sectionProgress?.reading_completed ? "✓" : "📖"}
+                </div>
+
+                <div>
+                  <p className="eyebrow">Required Reading</p>
+
+                  <h3>
+                    {sectionProgress?.reading_completed
+                      ? "Reading Complete"
+                      : "Finished Reading?"}
+                  </h3>
+
+                  <p>
+                    {sectionProgress?.reading_completed
+                      ? "You've completed the required textbook reading for this section."
+                      : "When you've finished the required pages above, mark the reading complete to continue."}
+                  </p>
+                </div>
+              </div>
+
+              {sectionProgress?.reading_completed ? (
+                <div className="reading-complete-badge">✓ Completed</div>
+              ) : (
+                <button
+                  className="complete-reading-button"
+                  onClick={completeReading}
+                  disabled={markingReadingComplete}
+                >
+                  {markingReadingComplete
+                    ? "Saving..."
+                    : "✓ I've Finished the Reading"}
+                </button>
+              )}
+            </section>
+
+            <section
+              className={
+                sectionProgress?.reading_completed
+                  ? "lesson-next-card concept-unlocked"
+                  : "lesson-next-card concept-locked"
+              }
+            >
+              <p className="eyebrow">Concept Check</p>
 
               <h3>Check Your Understanding</h3>
 
-              <p>
-                This is where we'll add the interactive questions, coding
-                activity, and mastery check.
-              </p>
+              {sectionProgress?.reading_completed ? (
+                <>
+                  <p>Reading complete. Your concept check is now unlocked.</p>
+
+                  <button className="start-concept-button">
+                    Start Concept Check →
+                  </button>
+                </>
+              ) : (
+                <p>🔒 Finish the required reading to unlock this activity.</p>
+              )}
             </section>
           </main>
         )}

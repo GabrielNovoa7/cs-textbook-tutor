@@ -144,6 +144,25 @@ def init_db():
         )
     """)
 
+    connection.execute("""
+    CREATE TABLE IF NOT EXISTS section_progress (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        section_id INTEGER NOT NULL UNIQUE,
+
+        reading_completed INTEGER NOT NULL DEFAULT 0,
+        concept_check_completed INTEGER NOT NULL DEFAULT 0,
+        activity_completed INTEGER NOT NULL DEFAULT 0,
+        mastery_completed INTEGER NOT NULL DEFAULT 0,
+
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        completed_at TEXT,
+
+        FOREIGN KEY (section_id)
+            REFERENCES sections(id)
+            ON DELETE CASCADE
+        )
+    """)
+
     connection.commit()
     connection.close()
 
@@ -428,6 +447,79 @@ def learning_path_exists(textbook_id):
     connection.close()
 
     return result["total"] > 0
+
+
+def get_section_progress(section_id):
+    connection = get_connection()
+
+    progress = connection.execute(
+        """
+        SELECT
+            section_id,
+            reading_completed,
+            concept_check_completed,
+            activity_completed,
+            mastery_completed,
+            updated_at,
+            completed_at
+        FROM section_progress
+        WHERE section_id = ?
+        """,
+        (section_id,),
+    ).fetchone()
+
+    connection.close()
+
+    if progress:
+        return dict(progress)
+
+    return {
+        "section_id": section_id,
+        "reading_completed": 0,
+        "concept_check_completed": 0,
+        "activity_completed": 0,
+        "mastery_completed": 0,
+        "updated_at": None,
+        "completed_at": None,
+    }
+
+
+def mark_reading_complete(section_id):
+    connection = get_connection()
+
+    section = connection.execute(
+        """
+        SELECT id
+        FROM sections
+        WHERE id = ?
+        """,
+        (section_id,),
+    ).fetchone()
+
+    if not section:
+        connection.close()
+        return None
+
+    connection.execute(
+        """
+        INSERT INTO section_progress (
+            section_id,
+            reading_completed
+        )
+        VALUES (?, 1)
+
+        ON CONFLICT(section_id)
+        DO UPDATE SET
+            reading_completed = 1,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (section_id,),
+    )
+
+    connection.commit()
+    connection.close()
+
+    return get_section_progress(section_id)
 
 
 # =====================================================
