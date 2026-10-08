@@ -1,12 +1,13 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from pathlib import Path
 from hashlib import sha256
 from uuid import uuid4
+from contextlib import closing
 
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
 
 import shutil
 
@@ -27,6 +28,7 @@ from backend.database import (
     get_textbook,
     save_textbook,
     get_textbooks,
+    get_connection,
     get_section_context,
     save_learning_path,
     get_learning_path,
@@ -41,12 +43,17 @@ from backend.database import (
 )
 
 from backend.lesson_source import build_section_source
+from backend.concept_check import load_or_create, submit_attempt, attempt_history
+from backend.lesson_activity import load_activity, save_activity
 
 from backend.vector_store import add_textbook_chunks, search_textbook
 
 from backend.tutor import generate_tutor_response
 
-from backend.code_runner import run_java_code
+from backend.code_runner import run_code_language
+from backend.learning_tools import router as learning_router, init_learning_tools
+from backend.book_cover import render_cover
+from typing import Literal
 
 # =====================================================
 # REQUEST MODELS
@@ -63,6 +70,22 @@ class CreateChatRequest(BaseModel):
 
 class CodeRunRequest(BaseModel):
     code: str
+    language: Literal['java','cpp','python'] = 'java'
+
+
+class ConceptCheckAttemptRequest(BaseModel):
+    answers: dict[str, StrictInt]
+
+
+class StartConceptCheckRequest(BaseModel):
+    retry_failed: bool = False
+
+
+class ActivitySubmissionRequest(BaseModel):
+    response: str = ""
+    order: list[StrictInt] = []
+    reviewed: list[StrictInt] = []
+    complete: bool = False
 
 
 # =====================================================
@@ -88,6 +111,8 @@ UPLOAD_FOLDER.mkdir(exist_ok=True)
 
 
 init_db()
+init_learning_tools()
+app.include_router(learning_router)
 
 
 # =====================================================
@@ -128,6 +153,22 @@ def home():
 @app.get("/textbooks")
 def list_textbooks():
     return get_textbooks()
+
+
+@app.delete("/textbooks/{textbook_id}")
+def delete_textbook(textbook_id: int):
+    textbook = get_textbook(textbook_id)
+    if not textbook:
+        raise HTTPException(404, "Textbook was not found.")
+    file_path = (UPLOAD_FOLDER / textbook["stored_filename"]).resolve()
+    if file_path.parent != UPLOAD_FOLDER.resolve():
+        raise HTTPException(400, "Invalid textbook file path.")
+    with closing(get_connection()) as connection:
+        with connection:
+            # Foreign-key cascades remove all book-owned records together.
+            connection.execute("DELETE FROM textbooks WHERE id=?", (textbook_id,))
+            file_path.unlink(missing_ok=True)
+    return {"deleted": True, "textbook_id": textbook_id}
 
 
 # =====================================================
@@ -245,7 +286,10 @@ def rebuild_learning_path(textbook_id: int):
     # Save even if there are minor warnings.
     # A book does not need to have a perfectly
     # sequential TOC to have a Learning Path.
-    result = save_learning_path(textbook_id=textbook_id, chapters=analysis["chapters"])
+    try:
+        result = save_learning_path(textbook_id=textbook_id, chapters=analysis["chapters"])
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from None
 
     return {
         "saved": True,
@@ -306,6 +350,22 @@ def get_textbook_pdf(textbook_id: int):
     )
 
 
+@app.get('/textbooks/{textbook_id}/cover')
+def get_textbook_cover(textbook_id: int):
+    textbook = get_textbook(textbook_id)
+    if not textbook:
+        raise HTTPException(404, 'Textbook was not found.')
+    path = (UPLOAD_FOLDER / textbook['stored_filename']).resolve()
+    if path.parent != UPLOAD_FOLDER.resolve() or not path.is_file():
+        raise HTTPException(404, 'Textbook PDF was not found.')
+    try:
+        stat = path.stat()
+        image = render_cover(str(path), stat.st_mtime_ns, stat.st_size)
+    except Exception:
+        raise HTTPException(422, 'Could not render this textbook preview.') from None
+    return Response(image, media_type='image/png', headers={'Cache-Control': 'private, max-age=3600'})
+
+
 @app.get("/sections/{section_id}/lesson-source")
 def get_section_lesson_source(section_id: int):
     context = get_section_context(section_id)
@@ -357,6 +417,33 @@ def complete_section_reading(section_id: int):
 # =====================================================
 # DEBUG PDF PAGES
 # =====================================================
+
+
+@app.post("/sections/{section_id}/concept-check")
+def start_concept_check(section_id: int, request: StartConceptCheckRequest | None = None):
+    return load_or_create(section_id, UPLOAD_FOLDER, retry_failed=bool(request and request.retry_failed))
+
+
+@app.get("/sections/{section_id}/concept-check/attempts")
+def list_concept_check_attempts(section_id: int):
+    return attempt_history(section_id)
+
+
+@app.post("/sections/{section_id}/concept-check/attempts")
+def grade_concept_check(section_id: int, request: ConceptCheckAttemptRequest):
+    return submit_attempt(section_id, request.answers)
+
+
+@app.get("/sections/{section_id}/activity")
+def get_lesson_activity(section_id: int):
+    return load_activity(section_id)
+
+
+@app.post("/sections/{section_id}/activity")
+def submit_lesson_activity(section_id: int, request: ActivitySubmissionRequest):
+    if len(request.response) > 20000:
+        raise HTTPException(422, "Activity response is too large.")
+    return save_activity(section_id, request.response, request.order, request.reviewed, request.complete)
 
 
 @app.get("/textbooks/{textbook_id}/debug-pages")
@@ -561,4 +648,4 @@ def run_code(request: CodeRunRequest):
     if len(request.code) > 20000:
         raise HTTPException(status_code=400, detail="Code is too large.")
 
-    return run_java_code(request.code)
+    return run_code_language(request.code, request.language)

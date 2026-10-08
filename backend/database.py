@@ -1,4 +1,5 @@
 import sqlite3
+import json
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent / "tutor.db"
@@ -163,6 +164,40 @@ def init_db():
         )
     """)
 
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS concept_checks (
+            section_id INTEGER PRIMARY KEY REFERENCES sections(id) ON DELETE CASCADE,
+            status TEXT NOT NULL CHECK(status IN ('creating', 'ready', 'failed')),
+            questions_json TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS concept_check_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            section_id INTEGER NOT NULL REFERENCES concept_checks(section_id) ON DELETE CASCADE,
+            answers_json TEXT NOT NULL,
+            feedback_json TEXT NOT NULL,
+            score INTEGER NOT NULL CHECK(score BETWEEN 0 AND 4),
+            passed INTEGER NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    # Additive migration for quizzes created before failure diagnostics existed.
+    quiz_columns = {row["name"] for row in connection.execute("PRAGMA table_info(concept_checks)")}
+    for name in ("failure_message", "response_json", "activity_json"):
+        if name not in quiz_columns:
+            connection.execute(f"ALTER TABLE concept_checks ADD COLUMN {name} TEXT")
+    attempt_columns = {row["name"] for row in connection.execute("PRAGMA table_info(concept_check_attempts)")}
+    if "total_questions" not in attempt_columns:
+        connection.execute("ALTER TABLE concept_check_attempts ADD COLUMN total_questions INTEGER NOT NULL DEFAULT 4")
+    connection.execute("""CREATE TABLE IF NOT EXISTS activity_submissions (
+        section_id INTEGER PRIMARY KEY REFERENCES sections(id) ON DELETE CASCADE,
+        response_json TEXT NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )""")
+    preserve_legacy_completion(connection)
     connection.commit()
     connection.close()
 
@@ -293,30 +328,22 @@ def save_learning_path(textbook_id, chapters):
     Saves the cleaned chapter/section structure
     for one textbook.
 
-    Existing chapter/section data for the textbook
-    is replaced so the Learning Path can be rebuilt
-    later when our parser improves.
+    Match chapter/section numbers to preserve IDs and learning records.
+    Refuse removal of sections with learning records rather than erase them.
     """
 
     connection = get_connection()
 
     try:
-        # Delete the old structure first.
-        # Sections are automatically deleted because
-        # sections use ON DELETE CASCADE.
-        connection.execute(
-            """
-            DELETE FROM chapters
-            WHERE textbook_id = ?
-            """,
-            (textbook_id,),
-        )
+        connection.execute("BEGIN IMMEDIATE")
+        retained_chapters = set()
+        retained_sections = set()
 
         chapter_count = 0
         section_count = 0
 
         for chapter in chapters:
-            cursor = connection.execute(
+            connection.execute(
                 """
                 INSERT INTO chapters (
                     textbook_id,
@@ -327,6 +354,9 @@ def save_learning_path(textbook_id, chapters):
                     confidence
                 )
                 VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(textbook_id, chapter_number) DO UPDATE SET
+                    title=excluded.title, book_page=excluded.book_page,
+                    toc_pdf_page=excluded.toc_pdf_page, confidence=excluded.confidence
                 """,
                 (
                     textbook_id,
@@ -338,7 +368,11 @@ def save_learning_path(textbook_id, chapters):
                 ),
             )
 
-            chapter_id = cursor.lastrowid
+            chapter_id = connection.execute(
+                "SELECT id FROM chapters WHERE textbook_id=? AND chapter_number=?",
+                (textbook_id, chapter["number"]),
+            ).fetchone()["id"]
+            retained_chapters.add(chapter_id)
             chapter_count += 1
 
             for section in chapter.get("sections", []):
@@ -353,6 +387,9 @@ def save_learning_path(textbook_id, chapters):
                         confidence
                     )
                     VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(chapter_id, section_number) DO UPDATE SET
+                        title=excluded.title, book_page=excluded.book_page,
+                        toc_pdf_page=excluded.toc_pdf_page, confidence=excluded.confidence
                     """,
                     (
                         chapter_id,
@@ -365,6 +402,30 @@ def save_learning_path(textbook_id, chapters):
                 )
 
                 section_count += 1
+                retained_sections.add(connection.execute(
+                    "SELECT id FROM sections WHERE chapter_id=? AND section_number=?",
+                    (chapter_id, section["number"]),
+                ).fetchone()["id"])
+
+        old_sections = connection.execute(
+            "SELECT s.id FROM sections s JOIN chapters c ON s.chapter_id=c.id WHERE c.textbook_id=?",
+            (textbook_id,),
+        ).fetchall()
+        has_notes_table = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='study_notes'").fetchone()
+        for row in old_sections:
+            if row["id"] not in retained_sections:
+                has_records = connection.execute(
+                    "SELECT 1 FROM section_progress WHERE section_id=? UNION ALL SELECT 1 FROM concept_checks WHERE section_id=?",
+                    (row["id"], row["id"]),
+                ).fetchone()
+                if not has_records and has_notes_table:
+                    has_records = connection.execute("SELECT 1 FROM study_notes WHERE section_id=? AND (note!='' OR bookmarks_json!='[]')", (row["id"],)).fetchone()
+                if has_records:
+                    raise ValueError("Rebuild would remove a section with saved learning records. Existing Learning Path was kept.")
+                connection.execute("DELETE FROM sections WHERE id=?", (row["id"],))
+        for row in connection.execute("SELECT id FROM chapters WHERE textbook_id=?", (textbook_id,)).fetchall():
+            if row["id"] not in retained_chapters:
+                connection.execute("DELETE FROM chapters WHERE id=?", (row["id"],))
 
         connection.commit()
 
@@ -378,8 +439,32 @@ def save_learning_path(textbook_id, chapters):
         connection.close()
 
 
+def preserve_legacy_completion(connection):
+    """Previously passed lessons must not gain new mandatory activities."""
+    rows = connection.execute("""SELECT q.section_id, q.response_json, q.activity_json
+        FROM concept_checks q JOIN section_progress p ON p.section_id=q.section_id
+        WHERE q.status='ready' AND p.reading_completed=1
+        AND p.concept_check_completed=1 AND p.mastery_completed=0""").fetchall()
+    for row in rows:
+        try:
+            payload = json.loads(row["response_json"]) if row["response_json"] else {}
+            draft = json.loads(payload.get("output_text", "{}"))
+            activity = json.loads(row["activity_json"]) if row["activity_json"] else None
+        except (ValueError, TypeError):
+            continue
+        # New lessons explicitly include an activity field, even when null.
+        legacy = "activity" not in draft and (activity is None or
+                   (activity.get("activity_type") == "explain" and activity.get("title") == "Teach it back"))
+        if legacy:
+            connection.execute("""UPDATE section_progress SET activity_completed=1,
+                mastery_completed=1, updated_at=CURRENT_TIMESTAMP,
+                completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP) WHERE section_id=?""", (row["section_id"],))
+
+
 def get_learning_path(textbook_id):
     connection = get_connection()
+    preserve_legacy_completion(connection)
+    connection.commit()
 
     chapter_rows = connection.execute(
         """
@@ -407,18 +492,16 @@ def get_learning_path(textbook_id):
         section_rows = connection.execute(
             """
             SELECT
-                id,
-                chapter_id,
-                section_number,
-                title,
-                book_page,
-                toc_pdf_page,
-                confidence
-            FROM sections
-            WHERE chapter_id = ?
+                s.id, s.chapter_id, s.section_number, s.title, s.book_page,
+                s.toc_pdf_page, s.confidence,
+                COALESCE(p.mastery_completed, 0) AS mastery_completed,
+                COALESCE(p.reading_completed, 0) AS reading_completed,
+                COALESCE(p.concept_check_completed, 0) AS concept_check_completed
+            FROM sections s LEFT JOIN section_progress p ON p.section_id=s.id
+            WHERE s.chapter_id = ?
             ORDER BY
-                book_page ASC,
-                id ASC
+                COALESCE(s.book_page, s.toc_pdf_page) ASC,
+                s.id ASC
             """,
             (chapter["id"],),
         ).fetchall()
@@ -702,13 +785,15 @@ def get_section_context(section_id):
 
         WHERE
             chapter_id = ?
-            AND id > ?
+            AND (COALESCE(book_page, toc_pdf_page) > ? OR
+                 (COALESCE(book_page, toc_pdf_page) = ? AND id > ?))
 
-        ORDER BY id ASC
+        ORDER BY COALESCE(book_page, toc_pdf_page), id
 
         LIMIT 1
         """,
-        (context["chapter_id"], section_id),
+        (context["chapter_id"], context["section_book_page"] or context["section_toc_pdf_page"],
+         context["section_book_page"] or context["section_toc_pdf_page"], section_id),
     ).fetchone()
 
     context["next_section"] = dict(next_section) if next_section else None

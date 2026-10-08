@@ -1,9 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Editor from "@monaco-editor/react";
+import ConceptCheck from "./ConceptCheck";
+import ProfilePreferences from "./ProfilePreferences";
+import LessonActivity from "./LessonActivity";
+import BookCover from "./BookCover";
+import { StudyDashboard, SectionNotes, ChapterReview } from "./StudyTools";
+import { starters } from "./codeSamples";
 
 const API_BASE = "http://127.0.0.1:8000";
 
@@ -43,6 +49,9 @@ type LearningPathSection = {
   book_page: number | null;
   toc_pdf_page: number | null;
   confidence: "direct" | "recovered";
+  mastery_completed?: number;
+  reading_completed?: number;
+  concept_check_completed?: number;
 };
 
 type LessonSource = {
@@ -89,7 +98,7 @@ type LearningPathResponse = {
   chapters: LearningPathChapter[];
 };
 
-type SectionProgress = {
+export type SectionProgress = {
   section_id: number;
   reading_completed: number;
   concept_check_completed: number;
@@ -111,6 +120,24 @@ function App() {
   const [uploading, setUploading] = useState(false);
 
   const [uploadMessage, setUploadMessage] = useState("");
+  const [deletingBook, setDeletingBook] = useState<number | null>(null);
+
+  async function deleteBook(book: Textbook) {
+    if (!window.confirm(`Delete "${book.filename}" from your library?`)) return;
+    if (!window.confirm("Final confirmation: permanently delete this PDF, its chats, learning path, quizzes and progress? This cannot be undone.")) return;
+    setDeletingBook(book.id);
+    try {
+      const response = await fetch(`${API_BASE}/textbooks/${book.id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not delete the book. Please try again.");
+      setTextbooks((books) => books.filter((item) => item.id !== book.id));
+      if (selectedBook?.id === book.id) setSelectedBook(null);
+      setUploadMessage("Book deleted.");
+    } catch (error) {
+      setUploadMessage(error instanceof Error ? error.message : "Could not delete the book.");
+    } finally {
+      setDeletingBook(null);
+    }
+  }
 
   const [selectedBook, setSelectedBook] = useState<Textbook | null>(null);
 
@@ -129,6 +156,8 @@ function App() {
   const [runningCode, setRunningCode] = useState(false);
 
   const [reviewingCode, setReviewingCode] = useState(false);
+  const [codeLanguage, setCodeLanguage] = useState<keyof typeof starters>("java");
+  const codeDrafts = useRef({ ...starters });
 
   const [code, setCode] = useState(
     `public class Main {
@@ -140,6 +169,9 @@ function App() {
 
   const [sectionProgress, setSectionProgress] =
     useState<SectionProgress | null>(null);
+  const updateActivityProgress = useCallback((progress: SectionProgress) => {
+    setSectionProgress((current) => current?.section_id === progress.section_id ? progress : current);
+  }, []);
 
   const [markingReadingComplete, setMarkingReadingComplete] = useState(false);
 
@@ -306,13 +338,15 @@ function App() {
         );
 
         if (!rebuildResponse.ok) {
-          throw new Error("Could not build the Learning Path.");
+          const errorData = await rebuildResponse.json();
+          throw new Error(typeof errorData.detail === "string"
+            ? errorData.detail : "Could not build the Learning Path.");
         }
 
         const rebuildResult = await rebuildResponse.json();
 
         if (!rebuildResult.saved) {
-          throw new Error("The textbook structure could not be safely built.");
+          throw new Error(rebuildResult.reason || "The textbook structure could not be safely built.");
         }
 
         response = await fetch(
@@ -334,7 +368,8 @@ function App() {
     } catch (error) {
       console.error(error);
 
-      setLearningPathError("Could not load this textbook's Learning Path.");
+      setLearningPathError(error instanceof Error
+        ? error.message : "Could not load this textbook's Learning Path.");
     } finally {
       setLearningPathLoading(false);
     }
@@ -381,6 +416,7 @@ function App() {
       setLessonSource(lessonData);
 
       setSectionProgress(progressData);
+      void fetch(`${API_BASE}/sections/${section.id}/visit`, { method: "POST" }).catch(() => {});
     } catch (error) {
       console.error(error);
 
@@ -388,6 +424,19 @@ function App() {
     } finally {
       setLessonLoading(false);
     }
+  }
+
+  async function resumeLesson(destination: { textbook_id: number; section_id: number }) {
+    const book = textbooks.find(book => book.id === destination.textbook_id);
+    if (!book) return;
+    await openLearningPath(book);
+    try {
+      const response = await fetch(`${API_BASE}/textbooks/${book.id}/learning-path`);
+      if (!response.ok) throw new Error("Could not resume learning.");
+      const path: LearningPathResponse = await response.json();
+      const section = path.chapters.flatMap(chapter => chapter.sections).find(section => section.id === destination.section_id);
+      if (section) await openLesson(section);
+    } catch (error) { setLearningPathError(error instanceof Error ? error.message : "Could not resume learning."); }
   }
 
   async function completeReading() {
@@ -421,7 +470,7 @@ function App() {
     }
   }
 
-  function returnToLearningPath() {
+  async function returnToLearningPath() {
     setView("dashboard");
 
     setActiveSection("learning-path");
@@ -431,6 +480,12 @@ function App() {
     setLessonSource(null);
 
     setLessonError("");
+    if (learningPathBook) {
+      try {
+        const response = await fetch(`${API_BASE}/textbooks/${learningPathBook.id}/learning-path`);
+        if (response.ok) setLearningPath(await response.json());
+      } catch { setLearningPathError("Could not refresh course progress."); }
+    }
   }
 
   function closeLearningPathBook() {
@@ -569,14 +624,14 @@ function App() {
 
   async function runCode() {
     if (!code.trim()) {
-      setCodeOutput("Write some Java code first.");
+      setCodeOutput("Write some code first.");
 
       return;
     }
 
     setRunningCode(true);
 
-    setCodeOutput("Running...");
+    setCodeOutput(codeLanguage === "cpp" ? "Compiling C++… The first run can take a few minutes." : "Running...");
 
     try {
       const response = await fetch(`${API_BASE}/run-code`, {
@@ -588,6 +643,7 @@ function App() {
 
         body: JSON.stringify({
           code,
+          language: codeLanguage,
         }),
       });
 
@@ -617,7 +673,7 @@ function App() {
     }
 
     if (!code.trim()) {
-      setCodeOutput("Write some Java code first.");
+      setCodeOutput("Write some code first.");
 
       return;
     }
@@ -625,14 +681,14 @@ function App() {
     setReviewingCode(true);
 
     const tutorQuestion = `
-Please help me understand my Java code.
+Please help me understand my ${codeLanguage === "cpp" ? "C++" : codeLanguage} code.
 
 Do not immediately rewrite the entire solution for me.
 Explain what I did correctly, what is wrong, and guide me toward fixing it.
 
 MY CODE:
 
-\`\`\`java
+\`\`\`${codeLanguage}
 ${code}
 \`\`\`
 
@@ -705,6 +761,7 @@ Please connect your explanation to the textbook when relevant.
   if (view === "study" && selectedBook) {
     return (
       <div className="study-page">
+        <div className="profile-corner"><ProfilePreferences /></div>
         <header className="study-header">
           <button className="back-button" onClick={returnToLibrary}>
             ← Library
@@ -823,20 +880,19 @@ Please connect your explanation to the textbook when relevant.
                 <div>
                   <p className="eyebrow">Playground</p>
 
-                  <h3>Java Editor</h3>
+                  <h3>Code Editor</h3>
+                  <label>Language <select value={codeLanguage} disabled={runningCode || reviewingCode}
+                    onChange={event => {
+                      const next = event.target.value as keyof typeof starters;
+                      codeDrafts.current[codeLanguage] = code;
+                      setCodeLanguage(next); setCode(codeDrafts.current[next]); setCodeOutput("");
+                    }}><option value="java">Java</option><option value="cpp">C++</option><option value="python">Python</option></select></label>
                 </div>
 
                 <button
                   className="reset-code-button"
-                  onClick={() =>
-                    setCode(
-                      `public class Main {
-    public static void main(String[] args) {
-        System.out.println("Hello from Java!");
-    }
-}`,
-                    )
-                  }
+                  onClick={() => setCode(starters[codeLanguage])}
+                  disabled={runningCode || reviewingCode}
                 >
                   Reset
                 </button>
@@ -846,7 +902,7 @@ Please connect your explanation to the textbook when relevant.
                 <Editor
                   height="100%"
                   defaultLanguage="java"
-                  language="java"
+                  language={codeLanguage}
                   theme="vs-dark"
                   value={code}
                   onChange={(value) => setCode(value ?? "")}
@@ -901,8 +957,15 @@ Please connect your explanation to the textbook when relevant.
   // ==========================================
 
   if (view === "lesson" && selectedLearningSection) {
+    const allSections = learningPath?.chapters.flatMap((chapter) => chapter.sections) ?? [];
+    const position = allSections.findIndex((section) => section.id === selectedLearningSection.id);
+    const previous = position > 0 ? allSections[position - 1] : undefined;
+    const next = position >= 0 ? allSections[position + 1] : undefined;
+    const chapterPosition = learningPath?.chapters.findIndex((chapter) => chapter.id === selectedLearningSection.chapter_id) ?? -1;
+    const nextChapter = chapterPosition >= 0 ? learningPath?.chapters[chapterPosition + 1] : undefined;
     return (
       <div className="lesson-page">
+        <div className="profile-corner"><ProfilePreferences /></div>
         <header className="lesson-header">
           <button className="back-button" onClick={returnToLearningPath}>
             ← Learning Path
@@ -1049,16 +1112,42 @@ Please connect your explanation to the textbook when relevant.
 
               {sectionProgress?.reading_completed ? (
                 <>
-                  <p>Reading complete. Your concept check is now unlocked.</p>
-
-                  <button className="start-concept-button">
-                    Start Concept Check →
-                  </button>
+                  <ConceptCheck
+                    key={selectedLearningSection.id}
+                    sectionId={selectedLearningSection.id}
+                    completed={!!sectionProgress?.concept_check_completed}
+                    onPass={() => setSectionProgress((progress) => progress?.section_id === selectedLearningSection.id
+                      ? { ...progress, concept_check_completed: 1 } : progress)}
+                  />
                 </>
               ) : (
                 <p>🔒 Finish the required reading to unlock this activity.</p>
               )}
             </section>
+            {sectionProgress?.concept_check_completed ? (
+              <LessonActivity key={selectedLearningSection.id} sectionId={selectedLearningSection.id} onProgress={updateActivityProgress} />
+            ) : <section className="lesson-next-card"><p>Pass the section questions to unlock its application activity.</p></section>}
+            <section className="lesson-next-card lesson-navigation">
+              <p>{sectionProgress?.mastery_completed ? "✓ This section is complete." : "You can browse ahead; unfinished work stays saved in this section."}</p>
+              <nav className="lesson-navigation-actions" aria-label="Lesson navigation">
+                <div className="section-navigation-buttons">
+                  {previous && <button className="lesson-nav-button" disabled={lessonLoading}
+                    title={`${previous.section_number} — ${previous.title}`}
+                    onClick={() => void openLesson(previous)}>← Previous Section</button>}
+                  {next?.chapter_id === selectedLearningSection.chapter_id && <button className="lesson-nav-button lesson-nav-primary" disabled={lessonLoading}
+                    title={`${next.section_number} — ${next.title}`}
+                    onClick={() => void openLesson(next)}>Next Section →</button>}
+                </div>
+                {nextChapter && <button className="lesson-nav-button next-chapter-button" disabled={lessonLoading}
+                  title={`Chapter ${nextChapter.chapter_number} — ${nextChapter.title}`} onClick={() => {
+                  if (nextChapter.sections[0]) void openLesson(nextChapter.sections[0]);
+                  else { void returnToLearningPath(); setExpandedChapterId(nextChapter.id); }
+                }}>Next Chapter {nextChapter.chapter_number} →</button>}
+              </nav>
+              {!next && <p>End of textbook path. Revisit any section from the Learning Path.</p>}
+            </section>
+            {lessonSource && <SectionNotes key={selectedLearningSection.id} sectionId={selectedLearningSection.id}
+              textbookId={lessonSource.textbook_id} startPage={lessonSource.pdf_start_page ?? 1} />}
           </main>
         )}
       </div>
@@ -1073,6 +1162,7 @@ Please connect your explanation to the textbook when relevant.
     return (
       <>
         {uploadMessage && <p className="upload-message">{uploadMessage}</p>}
+        <StudyDashboard compact onOpen={resumeLesson} />
 
         <section className="welcome-card">
           <div>
@@ -1108,9 +1198,7 @@ Please connect your explanation to the textbook when relevant.
             ) : (
               textbooks.map((book) => (
                 <article className="book-card" key={book.id}>
-                  <div className="book-cover">
-                    <span>CS</span>
-                  </div>
+                  <BookCover id={book.id} title={book.filename} />
 
                   <div className="book-info">
                     <span className="book-label">Textbook</span>
@@ -1124,6 +1212,10 @@ Please connect your explanation to the textbook when relevant.
                     </div>
 
                     <div className="book-actions">
+                      <button className="delete-book-button" disabled={deletingBook !== null}
+                        onClick={() => deleteBook(book)}>
+                        {deletingBook === book.id ? "Deleting..." : "Delete Book"}
+                      </button>
                       <button
                         className="study-button"
                         onClick={() => openStudySession(book)}
@@ -1220,9 +1312,7 @@ Please connect your explanation to the textbook when relevant.
             <div className="book-grid">
               {textbooks.map((book) => (
                 <article className="book-card" key={book.id}>
-                  <div className="book-cover">
-                    <span>CS</span>
-                  </div>
+                  <BookCover id={book.id} title={book.filename} />
 
                   <div className="book-info">
                     <span className="book-label">Learning Path</span>
@@ -1246,6 +1336,9 @@ Please connect your explanation to the textbook when relevant.
       );
     }
 
+    const courseSections = learningPath?.chapters.flatMap((chapter) => chapter.sections) ?? [];
+    const overallProgress = courseSections.length
+      ? Math.round(courseSections.filter((section) => section.mastery_completed).length / courseSections.length * 100) : 0;
     return (
       <>
         <section className="path-course-header">
@@ -1265,14 +1358,14 @@ Please connect your explanation to the textbook when relevant.
             <div className="overall-progress-top">
               <span>Overall Progress</span>
 
-              <strong>0%</strong>
+              <strong>{overallProgress}%</strong>
             </div>
 
             <div className="progress-track">
               <div
                 className="progress-fill"
                 style={{
-                  width: "0%",
+                  width: `${overallProgress}%`,
                 }}
               />
             </div>
@@ -1301,21 +1394,16 @@ Please connect your explanation to the textbook when relevant.
               <h3>{learningPath.chapters.length} Chapters</h3>
 
               <p>
-                Chapter 1 is available now. Complete each chapter to unlock the
-                next one.
+                Browse any chapter. Complete the reading, questions, and relevant activities to finish each section.
               </p>
             </div>
 
             <div className="chapter-list">
               {learningPath.chapters.map((chapter, index) => {
-                /*
-                    For the MVP only Chapter 1
-                    is unlocked.
-
-                    Later this comes from real
-                    progress/mastery data.
-                  */
-                const locked = index > 0;
+                // Browsing ahead does not complete or skip any saved lesson work.
+                const locked = false;
+                const chapterProgress = chapter.sections.length
+                  ? Math.round(chapter.sections.filter((section) => section.mastery_completed).length / chapter.sections.length * 100) : 0;
 
                 const expanded = expandedChapterId === chapter.id;
 
@@ -1361,7 +1449,7 @@ Please connect your explanation to the textbook when relevant.
                           {locked ? (
                             <span className="locked-badge">Locked</span>
                           ) : (
-                            <span className="current-badge">Start Here</span>
+                            <span className="current-badge">{index === 0 ? "Start Here" : "Available"}</span>
                           )}
 
                           {!locked && (
@@ -1377,32 +1465,27 @@ Please connect your explanation to the textbook when relevant.
                           <div className="chapter-progress-summary">
                             <span>Chapter Progress</span>
 
-                            <strong>0%</strong>
+                            <strong>{chapterProgress}%</strong>
                           </div>
 
                           <div className="progress-track small">
                             <div
                               className="progress-fill"
                               style={{
-                                width: "0%",
+                                width: `${chapterProgress}%`,
                               }}
                             />
                           </div>
 
                           <div className="section-list">
-                            {chapter.sections.map((section, sectionIndex) => (
+                            {chapter.sections.map((section) => (
                               <button
-                                className={
-                                  sectionIndex === 0
-                                    ? "learning-section-row lesson-ready-row"
-                                    : "learning-section-row"
-                                }
+                                className="learning-section-row"
                                 key={section.id}
-                                disabled={sectionIndex !== 0}
                                 onClick={() => openLesson(section)}
                               >
                                 <div className="section-status-dot">
-                                  {sectionIndex === 0 ? "▶" : "○"}
+                                  {section.mastery_completed ? "✓" : "▶"}
                                 </div>
 
                                 <div className="learning-section-info">
@@ -1416,11 +1499,11 @@ Please connect your explanation to the textbook when relevant.
                                 </div>
 
                                 <div className="section-row-status">
-                                  {sectionIndex === 0 ? (
-                                    <span className="ready-badge">Ready</span>
+                                  {section.mastery_completed ? (
+                                    <span className="ready-badge">✓ Completed</span>
                                   ) : (
                                     <span className="upcoming-badge">
-                                      Upcoming
+                                      {section.concept_check_completed ? "Activity Remaining" : section.reading_completed ? "Questions Remaining" : "Available"}
                                     </span>
                                   )}
                                 </div>
@@ -1429,13 +1512,13 @@ Please connect your explanation to the textbook when relevant.
                           </div>
 
                           <div className="chapter-coming-next">
-                            <span>Next development step</span>
+                            <span>Learning sequence</span>
 
                             <strong>
-                              Open Section {chapter.sections[0]?.section_number}{" "}
-                              as an interactive lesson
+                              Reading → Questions → Application → Section Complete
                             </strong>
                           </div>
+                          <ChapterReview key={chapter.id} chapterId={chapter.id} />
                         </div>
                       )}
                     </div>
@@ -1478,6 +1561,7 @@ Please connect your explanation to the textbook when relevant.
 
   return (
     <div className="app">
+      <div className="profile-corner"><ProfilePreferences /></div>
       <input
         ref={fileInputRef}
         type="file"
@@ -1518,7 +1602,11 @@ Please connect your explanation to the textbook when relevant.
             className={
               activeSection === "learning-path" ? "nav-item active" : "nav-item"
             }
-            onClick={() => setActiveSection("learning-path")}
+            onClick={() => {
+              setView("dashboard");
+              setActiveSection("learning-path");
+              closeLearningPathBook();
+            }}
           >
             <span>🗺️</span>
             Learning Path
@@ -1581,11 +1669,7 @@ Please connect your explanation to the textbook when relevant.
             "Your full saved-chat browser will live here.",
           )}
 
-        {activeSection === "progress" &&
-          renderPlaceholder(
-            "Progress Dashboard",
-            "Reading, quiz, coding, and mastery progress will appear here.",
-          )}
+        {activeSection === "progress" && <StudyDashboard onOpen={resumeLesson} />}
       </main>
     </div>
   );

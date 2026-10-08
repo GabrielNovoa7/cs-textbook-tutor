@@ -25,3 +25,6 @@ node_modules/
 *.db
 *.db-shm
 *.db-wal
+
+# Local C++ compiler and cache
+.tools/

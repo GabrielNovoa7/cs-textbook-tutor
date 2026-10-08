@@ -387,6 +387,9 @@ def extract_table_of_contents(file_path):
 def extract_printed_table_of_contents(file_path, pages_to_scan=80):
     document = pymupdf.open(file_path)
 
+    # Some printed TOCs use "1 Software Development 1" without "Chapter".
+    numeric_chapter_pattern = re.compile(r"^\s*(\d{1,2})\s+([A-Za-z].*?)\s+(\d+)\s*$")
+
     toc_pages = []
     inside_contents = False
 
@@ -404,6 +407,12 @@ def extract_printed_table_of_contents(file_path, pages_to_scan=80):
             has_contents_heading = re.search(r"\bContents\b", text, re.IGNORECASE)
 
             has_chapter = re.search(r"Chapter\s*1\b", text, re.IGNORECASE)
+            if not has_chapter:
+                has_chapter = any(
+                    (match := numeric_chapter_pattern.match(" ".join(line.split())))
+                    and match.group(1) == "1"
+                    for line in text.splitlines()
+                )
 
             has_section = re.search(r"\b1[.\-]1[.]?\b", text)
 
@@ -411,12 +420,14 @@ def extract_printed_table_of_contents(file_path, pages_to_scan=80):
                 inside_contents = True
 
         if inside_contents:
+            # Chapter opening pages can also say Contents and contain numbered
+            # headings. They are not continuations of the book's printed TOC.
+            if re.search(r"Chapter\s+Objectives|CHAPTER\s+CONTENTS", text):
+                break
             toc_pages.append({"pdf_page": page_index + 1, "text": text})
 
             # Stop at the end of the detailed TOC.
-            if re.search(r"\bIndex\b", text, re.IGNORECASE) and re.search(
-                r"\bAppendix\b", text, re.IGNORECASE
-            ):
+            if re.search(r"(?im)^\s*Index\b", text):
                 break
 
     document.close()
@@ -425,6 +436,20 @@ def extract_printed_table_of_contents(file_path, pages_to_scan=80):
 
     for toc_page in toc_pages:
         lines = toc_page["text"].splitlines()
+        # A long chapter title may wrap before its page number.
+        joined_lines = []
+        index = 0
+        while index < len(lines):
+            line = " ".join(lines[index].split())
+            if (re.match(r"^(?:Chapter\s+)?\d{1,2}\s+[A-Za-z]", line, re.I)
+                    and not re.search(r"\d+\s*$", line)
+                    and index + 1 < len(lines)
+                    and re.match(r"^[A-Za-z].*\s+\d+\s*$", lines[index + 1].strip())):
+                line += " " + " ".join(lines[index + 1].split())
+                index += 1
+            joined_lines.append(line)
+            index += 1
+        lines = joined_lines
 
         for line in lines:
             cleaned = " ".join(line.split()).strip()
@@ -432,7 +457,7 @@ def extract_printed_table_of_contents(file_path, pages_to_scan=80):
             if not cleaned:
                 continue
 
-            chapter_match = CHAPTER_PATTERN.match(cleaned)
+            chapter_match = CHAPTER_PATTERN.match(cleaned) or numeric_chapter_pattern.match(cleaned)
 
             if chapter_match:
                 entries.append(

@@ -46,6 +46,14 @@ def find_chapter_content_page(
 
         normalized_page = normalize_text(text)
 
+        # Some chapter titles are artwork, while the opening page's selectable
+        # text contains only its mini contents, objectives and printed page.
+        if (re.search(r"Chapter\s+Objectives", text, re.I)
+                and re.search(rf"(?m)^\s*{re.escape(str(chapter_number))}\.1\s", text)
+                and re.search(rf"(?m)^\s*{chapter_book_page}\s*$", text)):
+            document.close()
+            return page_index + 1
+
         # Best case:
         # page contains both "Chapter X"
         # and the chapter title.
