@@ -3,17 +3,29 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from fastapi import HTTPException
+from backend.config import BACKEND_DIR
 
-ENV_PATH = Path(__file__).resolve().parent / ".env"
+ENV_PATH = BACKEND_DIR / ".env"
 
-load_dotenv(ENV_PATH)
+if not os.getenv('CSTUTOR_DESKTOP_MODE'):
+    load_dotenv(ENV_PATH)
 
-api_key = os.getenv("OPENAI_API_KEY")
+class ConfiguredClient:
+    def get(self):
+        key = os.getenv('OPENAI_API_KEY')
+        if not key:
+            raise HTTPException(409, 'Add your OpenAI API key in Desktop Settings to use AI features.')
+        return OpenAI(api_key=key)
 
-if not api_key:
-    raise RuntimeError("OPENAI_API_KEY was not found in backend/.env")
+    @property
+    def responses(self):
+        return self.get().responses
 
-client = OpenAI(api_key=api_key)
+    def with_options(self, **options):
+        return self.get().with_options(**options)
+
+client = ConfiguredClient()
 
 
 def generate_tutor_response(question, passages, chat_history=None):

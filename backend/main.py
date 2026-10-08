@@ -54,6 +54,9 @@ from backend.code_runner import run_code_language
 from backend.learning_tools import router as learning_router, init_learning_tools
 from backend.book_cover import render_cover
 from typing import Literal
+import os
+import secrets
+from backend.config import DATA_DIR, DESKTOP_TOKEN
 
 # =====================================================
 # REQUEST MODELS
@@ -96,16 +99,46 @@ class ActivitySubmissionRequest(BaseModel):
 app = FastAPI()
 
 
+@app.middleware('http')
+async def desktop_auth(request, call_next):
+    if DESKTOP_TOKEN and request.method != 'OPTIONS':
+        supplied = request.headers.get('X-Desktop-Token', '')
+        if request.method == 'GET' and (request.url.path.endswith('/pdf') or request.url.path.endswith('/cover')):
+            supplied = supplied or request.query_params.get('desktop_token', '')
+        if not secrets.compare_digest(supplied, DESKTOP_TOKEN):
+            return Response(status_code=401)
+    return await call_next(request)
+
+
+@app.get('/health')
+def health():
+    return {'status': 'ready'}
+
+
+class DesktopKey(BaseModel):
+    key: str
+
+
+@app.post('/desktop/api-key')
+def desktop_api_key(body: DesktopKey):
+    if not DESKTOP_TOKEN:
+        raise HTTPException(404, 'Desktop mode is not enabled.')
+    if not body.key.strip() or len(body.key)>1000:
+        raise HTTPException(422, 'Enter a valid API key.')
+    os.environ['OPENAI_API_KEY'] = body.key.strip()
+    return {'saved': True}
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173"] + (["null"] if DESKTOP_TOKEN else []),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-UPLOAD_FOLDER = Path(__file__).resolve().parent / "uploads"
+UPLOAD_FOLDER = DATA_DIR / "uploads"
 
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 

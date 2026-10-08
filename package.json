@@ -1,0 +1,54 @@
+{
+  "name": "cs-textbook-tutor-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal textbook learning workspace",
+  "author": "CS Textbook Tutor",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "desktop": "npm --prefix frontend run build && electron .",
+    "desktop:build": "npm --prefix frontend run build && powershell -NoProfile -ExecutionPolicy Bypass -File desktop/build-backend.ps1 && electron-builder --win nsis --x64 --publish never",
+    "desktop:package": "electron-builder --win nsis --x64 --publish never",
+    "desktop:test": "npm --prefix frontend run build && electron desktop/smoke.cjs"
+  },
+  "build": {
+    "appId": "com.cstextbook.tutor",
+    "productName": "CS Textbook Tutor",
+    "directories": {
+      "output": "desktop-release"
+    },
+    "files": [
+      "desktop/main.cjs",
+      "desktop/preload.cjs",
+      "frontend/dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "desktop-build/backend/tutor-backend",
+        "to": "backend"
+      },
+      {
+        "from": ".tools/zig-x86_64-windows-0.15.2",
+        "to": "cpp"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "desktop/icon.ico",
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  }
+}

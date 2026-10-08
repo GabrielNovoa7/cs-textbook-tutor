@@ -6,6 +6,8 @@ import os
 import signal
 from pathlib import Path
 
+from backend.config import CPP_COMPILER, PYTHON_RUNTIME
+
 MAX_OUTPUT_LENGTH = 10000
 
 
@@ -19,10 +21,10 @@ def run_code_language(code, language='java'):
         path = Path(folder)
         if language == 'python':
             (path / 'main.py').write_text(code, encoding='utf-8')
-            command = [sys.executable, '-I', '-u', 'main.py']
+            command = [PYTHON_RUNTIME or sys.executable, '-I', '-u', 'main.py']
         elif language == 'cpp':
             compiler = shutil.which('g++') or shutil.which('clang++')
-            local_zig = Path(__file__).resolve().parents[1] / '.tools' / 'zig-x86_64-windows-0.15.2' / 'zig.exe'
+            local_zig = Path(CPP_COMPILER) if CPP_COMPILER else Path(__file__).resolve().parents[1] / '.tools' / 'zig-x86_64-windows-0.15.2' / 'zig.exe'
             compiler_command = [compiler] if compiler else ([str(local_zig), 'c++'] if local_zig.exists() else None)
             if not compiler_command:
                 return {'status':'unavailable','output':'C++ requires g++ or clang++ on the backend PATH. Restart the backend after installing a compiler.'}

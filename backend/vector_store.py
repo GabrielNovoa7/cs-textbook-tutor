@@ -1,7 +1,8 @@
 from pathlib import Path
 import chromadb
+from backend.config import DATA_DIR
 
-VECTOR_DB_PATH = Path(__file__).resolve().parent / "vector_store"
+VECTOR_DB_PATH = DATA_DIR / "vector_store"
 
 client = chromadb.PersistentClient(path=str(VECTOR_DB_PATH))
 

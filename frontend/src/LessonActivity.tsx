@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
 import type { SectionProgress } from "./App";
 
-const API_BASE = "http://127.0.0.1:8000";
+import { API_BASE } from "./desktop";
 type Activity = {
   activity_type: string; title: string; prompt: string; items: string[];
   starter_code: string; language: string; checklist: string[];

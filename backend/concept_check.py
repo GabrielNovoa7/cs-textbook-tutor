@@ -1,4 +1,5 @@
 """Textbook-first quiz creation; all grading and subsequent loads are local."""
+import os
 
 import json
 import logging
@@ -462,6 +463,8 @@ def load_or_create(section_id, upload_folder, retry_failed=False):
         file_path = upload_folder / context["stored_filename"]
         if not file_path.exists():
             raise HTTPException(404, "Textbook PDF was not found.")
+        if os.getenv('CSTUTOR_DESKTOP_MODE') and not os.getenv('OPENAI_API_KEY'):
+            raise HTTPException(409, 'Add your OpenAI API key in profile settings to create a quiz.')
         # Preflight before claiming the single generation request.
         try:
             reading, candidates, source = collect_material(file_path, context)

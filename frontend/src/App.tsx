@@ -11,7 +11,7 @@ import BookCover from "./BookCover";
 import { StudyDashboard, SectionNotes, ChapterReview } from "./StudyTools";
 import { starters } from "./codeSamples";
 
-const API_BASE = "http://127.0.0.1:8000";
+import { API_BASE, resourceUrl } from "./desktop";
 
 type Section = "library" | "learning-path" | "chats" | "progress";
 
@@ -1042,7 +1042,7 @@ Please connect your explanation to the textbook when relevant.
 
                   <a
                     className="open-pdf-button"
-                    href={`${API_BASE}${lessonSource.pdf_url}`}
+                    href={resourceUrl(lessonSource.pdf_url)}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -1054,7 +1054,7 @@ Please connect your explanation to the textbook when relevant.
                   className="pdf-reader"
                   title={`Section ${lessonSource.section_number} textbook reading`}
                   src={
-                    `${API_BASE}${lessonSource.pdf_url}` +
+                    resourceUrl(lessonSource.pdf_url) +
                     `#page=${lessonSource.pdf_start_page}`
                   }
                 />

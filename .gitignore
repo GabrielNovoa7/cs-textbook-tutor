@@ -28,3 +28,6 @@ node_modules/
 
 # Local C++ compiler and cache
 .tools/
+desktop-release/
+desktop-build/
+frontend/dist/

@@ -1,3 +1,4 @@
+import { DesktopKeySettings } from "./DesktopSetup";
 import { useEffect, useRef, useState } from "react";
 
 const themes = [
@@ -66,7 +67,7 @@ export default function ProfilePreferences() {
           <span className="theme-swatch" style={{ background: item.color }} />{item.name}
         </label>)}
       </fieldset>
-      <p>Preferences are saved in this browser.</p>
+      <p>{window.desktop ? "Preferences are saved for this profile." : "Preferences are saved in this browser."}</p><DesktopKeySettings />
     </section>}
   </div>;
 }

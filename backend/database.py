@@ -1,8 +1,9 @@
 import sqlite3
 import json
 from pathlib import Path
+from backend.config import DATA_DIR
 
-DB_PATH = Path(__file__).resolve().parent / "tutor.db"
+DB_PATH = DATA_DIR / "tutor.db"
 
 
 def get_connection():

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { starters } from "./codeSamples";
 
-const API = "http://127.0.0.1:8000";
+import { API_BASE as API, resourceUrl } from "./desktop";
 async function api(path: string, method = "GET", body?: object) {
   const response = await fetch(API + path, { method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
   const data = await response.json();
@@ -31,7 +31,7 @@ export function StudyDashboard({ onOpen, compact = false }: { onOpen: (destinati
       </section>
       <section className="lesson-next-card"><h3>Review missed concepts</h3><p>Questions missed on your latest attempt in each section. Answering them correctly removes them from this list.</p>
         {!data.missed.length && <p>No missed questions to review.</p>}
-        {data.missed.map((m, i) => <article className="missed-concept" key={`${m.section_id}:${i}`}><p className="eyebrow">{m.filename} · Section {m.section_number}</p><strong>{m.prompt}</strong><p>{m.hint}</p><a href={`${API}/textbooks/${m.textbook_id}/pdf#page=${m.pdf_page}`} target="_blank" rel="noreferrer">Read PDF page {m.pdf_page}</a><button className="start-concept-button" onClick={() => onOpen(m)}>Practice this section</button></article>)}
+        {data.missed.map((m, i) => <article className="missed-concept" key={`${m.section_id}:${i}`}><p className="eyebrow">{m.filename} · Section {m.section_number}</p><strong>{m.prompt}</strong><p>{m.hint}</p><a href={`${resourceUrl(`/textbooks/${m.textbook_id}/pdf`)}#page=${m.pdf_page}`} target="_blank" rel="noreferrer">Read PDF page {m.pdf_page}</a><button className="start-concept-button" onClick={() => onOpen(m)}>Practice this section</button></article>)}
       </section>
       <CodePlayground />
     </>}
@@ -46,7 +46,7 @@ export function SectionNotes({ sectionId, textbookId, startPage }: { sectionId: 
   return <section className="lesson-next-card study-tools"><h3>My notes and bookmarks</h3><label>Section notes<textarea disabled={loading || busy} maxLength={20000} rows={5} value={note} onChange={e => setNote(e.target.value)} /></label>
     <button className="start-concept-button" disabled={loading || busy} onClick={() => void save()}>Save Notes</button>
     <div className="bookmark-controls"><label>PDF page <input type="number" min={1} value={page} onChange={e => setPage(Number(e.target.value))} /></label><button disabled={loading || busy || !Number.isInteger(page) || page < 1} onClick={() => void save([...bookmarks, page])}>Bookmark Page</button></div>
-    <ul>{bookmarks.map(p => <li key={p}><a href={`${API}/textbooks/${textbookId}/pdf#page=${p}`} target="_blank" rel="noreferrer">PDF page {p}</a> <button disabled={busy} aria-label={`Remove bookmark page ${p}`} onClick={() => void save(bookmarks.filter(x => x !== p))}>Remove</button></li>)}</ul><p role="status">{message}</p>
+    <ul>{bookmarks.map(p => <li key={p}><a href={`${resourceUrl(`/textbooks/${textbookId}/pdf`)}#page=${p}`} target="_blank" rel="noreferrer">PDF page {p}</a> <button disabled={busy} aria-label={`Remove bookmark page ${p}`} onClick={() => void save(bookmarks.filter(x => x !== p))}>Remove</button></li>)}</ul><p role="status">{message}</p>
   </section>;
 }
 
