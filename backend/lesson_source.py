@@ -46,6 +46,21 @@ def find_chapter_content_page(
 
         normalized_page = normalize_text(text)
 
+        # Titles are also repeated in prefaces and running headers. Confirm the
+        # opening's printed page number before accepting any title/number match.
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        margin_lines = lines[:2] + lines[-2:]
+        printed_page = re.escape(str(chapter_book_page))
+        if not any(re.search(rf'^(?:{printed_page})(?:\s|$)|(?:^|\s){printed_page}$', line)
+                   for line in margin_lines):
+            continue
+
+        # Some chapter titles are images; their selectable mini-contents remain.
+        first_section = re.search(rf'(?m)^\s*{re.escape(str(chapter_number))}\s*\.\s*1\s', text)
+        if first_section and re.search(r'\bTOP\s*ICS\b|Chapter\s+Objectives', text, re.I):
+            document.close()
+            return page_index + 1
+
         # Some chapter titles are artwork, while the opening page's selectable
         # text contains only its mini contents, objectives and printed page.
         if (re.search(r"Chapter\s+Objectives", text, re.I)
@@ -164,7 +179,8 @@ def build_section_source(file_path, section_context):
             "book_start_page": (section_book_page),
             "book_end_page": None,
             "page_offset": None,
-            "error": ("Could not locate the actual " "chapter pages in the PDF."),
+            "error": ("Could not locate this chapter's actual pages safely. "
+                      "Scanned chapter pages may need OCR. You can still read the full textbook PDF."),
         }
 
     chapter_book_page = section_context["chapter_book_page"]

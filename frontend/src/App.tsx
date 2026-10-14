@@ -3,7 +3,7 @@ import type { ChangeEvent, KeyboardEvent } from "react";
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import Editor from "@monaco-editor/react";
+import Editor from "./CodeEditor";
 import ConceptCheck from "./ConceptCheck";
 import ProfilePreferences from "./ProfilePreferences";
 import LessonActivity from "./LessonActivity";
@@ -96,6 +96,7 @@ type LearningPathResponse = {
   built: boolean;
   chapters_found?: number;
   chapters: LearningPathChapter[];
+  warnings?: { message: string }[];
 };
 
 export type SectionProgress = {
@@ -120,6 +121,8 @@ function App() {
   const [uploading, setUploading] = useState(false);
 
   const [uploadMessage, setUploadMessage] = useState("");
+  const [libraryError, setLibraryError] = useState("");
+  const [chatError, setChatError] = useState("");
   const [deletingBook, setDeletingBook] = useState<number | null>(null);
 
   async function deleteBook(book: Textbook) {
@@ -233,15 +236,26 @@ function App() {
       const data = await response.json();
 
       setTextbooks(data);
+      setLibraryError("");
     } catch (error) {
-      console.error(error);
+      setLibraryError(error instanceof Error ? error.message : "Could not load textbooks.");
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadTextbooks();
+    const controller = new AbortController();
+    fetch(`${API_BASE}/textbooks`, { signal: controller.signal }).then(async (response) => {
+      if (!response.ok) throw new Error("Could not load textbooks. Check that the backend is running.");
+      const data: Textbook[] = await response.json();
+      if (!controller.signal.aborted) setTextbooks(data);
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setLibraryError(error instanceof Error ? error.message : "Could not load textbooks.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
   }, []);
 
   function openFilePicker() {
@@ -276,7 +290,8 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Textbook upload failed.");
+        const data = await response.json().catch(() => null);
+        throw new Error(typeof data?.detail === "string" ? data.detail : "Textbook upload failed.");
       }
 
       const result = await response.json();
@@ -291,7 +306,7 @@ function App() {
     } catch (error) {
       console.error(error);
 
-      setUploadMessage("Something went wrong while uploading the textbook.");
+      setUploadMessage(error instanceof Error ? error.message : "Something went wrong while uploading the textbook.");
     } finally {
       setUploading(false);
 
@@ -420,7 +435,7 @@ function App() {
     } catch (error) {
       console.error(error);
 
-      setLessonError("Could not load this lesson.");
+      setLessonError(error instanceof Error ? error.message : "Could not load this lesson.");
     } finally {
       setLessonLoading(false);
     }
@@ -520,6 +535,7 @@ function App() {
   }
 
   async function openStudySession(book: Textbook) {
+    setChatError("");
     try {
       setOpeningStudy(book.id);
 
@@ -570,14 +586,14 @@ function App() {
 
       setView("study");
     } catch (error) {
-      console.error(error);
+      setLibraryError(error instanceof Error ? error.message : "Could not open the study chat.");
     } finally {
       setOpeningStudy(null);
     }
   }
 
   async function sendMessage() {
-    if (!messageInput.trim()) {
+    if (sending || reviewingCode || !messageInput.trim()) {
       return;
     }
 
@@ -590,6 +606,7 @@ function App() {
     setMessageInput("");
 
     setSending(true);
+    setChatError("");
 
     try {
       const response = await fetch(`${API_BASE}/chats/${currentChatId}/ask`, {
@@ -605,14 +622,16 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Tutor request failed.");
+        const data = await response.json().catch(() => null);
+        throw new Error(typeof data?.detail === "string" ? data.detail : "Tutor request failed.");
       }
 
       await response.json();
 
       await loadMessages(currentChatId);
     } catch (error) {
-      console.error(error);
+      setChatError(error instanceof Error ? error.message : "Could not reach the tutor.");
+      setMessageInput(question);
     } finally {
       setSending(false);
     }
@@ -666,6 +685,7 @@ function App() {
   }
 
   async function askTutorAboutCode() {
+    if (sending || reviewingCode) return;
     if (!currentChatId) {
       setCodeOutput("Open a study session first.");
 
@@ -679,6 +699,7 @@ function App() {
     }
 
     setReviewingCode(true);
+    setChatError("");
 
     const tutorQuestion = `
 Please help me understand my ${codeLanguage === "cpp" ? "C++" : codeLanguage} code.
@@ -715,7 +736,8 @@ Please connect your explanation to the textbook when relevant.
       });
 
       if (!response.ok) {
-        throw new Error("Tutor code review failed.");
+        const data = await response.json().catch(() => null);
+        throw new Error(typeof data?.detail === "string" ? data.detail : "Tutor code review failed.");
       }
 
       await response.json();
@@ -725,6 +747,7 @@ Please connect your explanation to the textbook when relevant.
       console.error(error);
 
       setCodeOutput("Could not ask the tutor about your code.");
+      setChatError(error instanceof Error ? error.message : "Could not ask the tutor about your code.");
     } finally {
       setReviewingCode(false);
     }
@@ -857,17 +880,21 @@ Please connect your explanation to the textbook when relevant.
                 onChange={(event) => setMessageInput(event.target.value)}
                 onKeyDown={handleMessageKeyDown}
                 placeholder="Ask your textbook a question..."
-                disabled={sending}
+                disabled={sending || reviewingCode}
+                maxLength={40000}
+                aria-label="Textbook question"
               />
 
               <button
                 className="send-button"
                 onClick={sendMessage}
-                disabled={sending || !messageInput.trim()}
+                disabled={sending || reviewingCode || !messageInput.trim()}
               >
                 {sending ? "..." : "Send"}
               </button>
             </div>
+
+            {chatError && <p className="path-error" role="alert">{chatError}</p>}
 
             <p className="chat-hint">
               Press Enter to send · Shift + Enter for a new line
@@ -934,7 +961,7 @@ Please connect your explanation to the textbook when relevant.
                 <button
                   className="ask-code-button"
                   onClick={askTutorAboutCode}
-                  disabled={reviewingCode}
+                  disabled={reviewingCode || sending}
                 >
                   {reviewingCode ? "Reviewing..." : "Ask Tutor About My Code"}
                 </button>
@@ -986,7 +1013,12 @@ Please connect your explanation to the textbook when relevant.
           <div className="lesson-loading">Loading textbook lesson...</div>
         )}
 
-        {lessonError && <div className="path-error">{lessonError}</div>}
+        {lessonError && <div className="path-error" role="alert">{lessonError}
+          {learningPathBook && <p><a className="open-pdf-button"
+            href={resourceUrl(`/textbooks/${learningPathBook.id}/pdf`)} target="_blank" rel="noreferrer">
+            Open textbook PDF
+          </a></p>}
+        </div>}
 
         {lessonSource && (
           <main className="lesson-layout">
@@ -1125,7 +1157,7 @@ Please connect your explanation to the textbook when relevant.
               )}
             </section>
             {sectionProgress?.concept_check_completed ? (
-              <LessonActivity key={selectedLearningSection.id} sectionId={selectedLearningSection.id} onProgress={updateActivityProgress} />
+              <LessonActivity key={`activity-${selectedLearningSection.id}`} sectionId={selectedLearningSection.id} onProgress={updateActivityProgress} />
             ) : <section className="lesson-next-card"><p>Pass the section questions to unlock its application activity.</p></section>}
             <section className="lesson-next-card lesson-navigation">
               <p>{sectionProgress?.mastery_completed ? "✓ This section is complete." : "You can browse ahead; unfinished work stays saved in this section."}</p>
@@ -1146,7 +1178,7 @@ Please connect your explanation to the textbook when relevant.
               </nav>
               {!next && <p>End of textbook path. Revisit any section from the Learning Path.</p>}
             </section>
-            {lessonSource && <SectionNotes key={selectedLearningSection.id} sectionId={selectedLearningSection.id}
+            {lessonSource && <SectionNotes key={`notes-${selectedLearningSection.id}`} sectionId={selectedLearningSection.id}
               textbookId={lessonSource.textbook_id} startPage={lessonSource.pdf_start_page ?? 1} />}
           </main>
         )}
@@ -1162,6 +1194,7 @@ Please connect your explanation to the textbook when relevant.
     return (
       <>
         {uploadMessage && <p className="upload-message">{uploadMessage}</p>}
+        {libraryError && <div className="path-error" role="alert">{libraryError} <button onClick={() => void loadTextbooks()}>Retry Library</button></div>}
         <StudyDashboard compact onOpen={resumeLesson} />
 
         <section className="welcome-card">
@@ -1254,29 +1287,6 @@ Please connect your explanation to the textbook when relevant.
           </div>
         </section>
 
-        <section className="section">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Pick up where you left off</p>
-
-              <h3>Recent Chats</h3>
-            </div>
-          </div>
-
-          <div className="chat-list">
-            <button className="chat-card">
-              <div className="chat-icon">💬</div>
-
-              <div className="chat-info">
-                <strong>Constructors Review</strong>
-
-                <p>Absolute Java</p>
-              </div>
-
-              <span className="chat-arrow">→</span>
-            </button>
-          </div>
-        </section>
       </>
     );
   }
@@ -1385,6 +1395,11 @@ Please connect your explanation to the textbook when relevant.
         {learningPathError && (
           <div className="path-error">{learningPathError}</div>
         )}
+
+        {!!learningPath?.warnings?.length && <section className="lesson-next-card" role="status">
+          <h3>Contents parsing notes</h3>
+          {learningPath.warnings.map(warning => <p key={warning.message}>{warning.message}</p>)}
+        </section>}
 
         {!learningPathLoading && learningPath && (
           <section className="chapter-roadmap">

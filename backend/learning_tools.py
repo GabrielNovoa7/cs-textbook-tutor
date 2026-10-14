@@ -59,7 +59,7 @@ def save_notes(sid: int, body: Notes):
 @router.get('/study-dashboard')
 def dashboard():
     with closing(get_connection()) as c:
-        books = [dict(row) for row in c.execute('SELECT id,filename FROM textbooks ORDER BY uploaded_at DESC')]
+        books = [dict(row) for row in c.execute("SELECT id,filename FROM textbooks WHERE indexing_status='ready' ORDER BY uploaded_at DESC")]
         for book in books:
             book['chapter_reviews'] = c.execute('SELECT count(DISTINCT r.chapter_id) FROM chapter_reviews r JOIN chapters ch ON ch.id=r.chapter_id WHERE ch.textbook_id=? AND r.passed=1',(book['id'],)).fetchone()[0]
             book['assignments'] = c.execute('SELECT count(*) FROM chapter_assignments a JOIN chapters ch ON ch.id=a.chapter_id WHERE ch.textbook_id=? AND a.completed=1',(book['id'],)).fetchone()[0]

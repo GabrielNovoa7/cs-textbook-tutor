@@ -28,7 +28,8 @@ class ConceptCheckTests(unittest.TestCase):
         from backend import main
         self.create()
         chat = db.create_chat(self.textbook, "Test chat")
-        with patch.object(main, "UPLOAD_FOLDER", self.folder):
+        with patch.object(main, "UPLOAD_FOLDER", self.folder), patch.object(main, "delete_textbook_chunks"), \
+                patch.object(main, "get_textbook_chunks", return_value={'ids': []}):
             self.assertTrue(main.delete_textbook(self.textbook)["deleted"])
         self.assertFalse((self.folder / "test.pdf").exists())
         self.assertIsNone(db.get_textbook(self.textbook))

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import Editor from "@monaco-editor/react";
+import Editor from "./CodeEditor";
 import type { SectionProgress } from "./App";
 
 import { API_BASE } from "./desktop";

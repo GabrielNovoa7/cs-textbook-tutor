@@ -27,7 +27,29 @@ def add_textbook_chunks(textbook_id, chunks):
             }
         )
 
-    collection.add(ids=ids, documents=documents, metadatas=metadatas)
+    # Large textbooks can exceed Chroma's per-request batch limit.
+    batch_size = client.get_max_batch_size()
+    for start in range(0, len(ids), batch_size):
+        end = start + batch_size
+        collection.add(ids=ids[start:end], documents=documents[start:end], metadatas=metadatas[start:end])
+
+
+def delete_textbook_chunks(textbook_id):
+    collection.delete(where={"textbook_id": textbook_id})
+
+
+def get_textbook_chunks(textbook_id):
+    return collection.get(where={"textbook_id": textbook_id}, include=["documents", "metadatas", "embeddings"])
+
+
+def restore_textbook_chunks(snapshot):
+    # Reuse saved embeddings: recovery never re-embeds a deleted book.
+    for start in range(0, len(snapshot['ids']), client.get_max_batch_size()):
+        end = start + client.get_max_batch_size()
+        parameters = {name: snapshot[name][start:end] for name in ('ids', 'embeddings', 'metadatas')}
+        if all(document is not None for document in snapshot['documents'][start:end]):
+            parameters['documents'] = snapshot['documents'][start:end]
+        collection.upsert(**parameters)
 
 
 def search_textbook(textbook_id, query, results=5):

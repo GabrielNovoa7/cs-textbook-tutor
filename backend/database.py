@@ -57,6 +57,9 @@ def init_db():
             )
         )
     """)
+    textbook_columns = {row['name'] for row in connection.execute('PRAGMA table_info(textbooks)')}
+    if 'indexing_status' not in textbook_columns:
+        connection.execute("ALTER TABLE textbooks ADD COLUMN indexing_status TEXT NOT NULL DEFAULT 'ready'")
 
     # -------------------------
     # LEARNING PATH CHAPTERS
@@ -235,7 +238,7 @@ def get_textbook(textbook_id):
         """
         SELECT *
         FROM textbooks
-        WHERE id = ?
+        WHERE id = ? AND indexing_status = 'ready'
         """,
         (textbook_id,),
     ).fetchone()
@@ -249,7 +252,7 @@ def get_textbook(textbook_id):
 
 
 def save_textbook(
-    filename, stored_filename, file_hash, page_count, characters_extracted, chunks
+    filename, stored_filename, file_hash, page_count, characters_extracted, chunks, *, indexed=True
 ):
     connection = get_connection()
 
@@ -261,11 +264,12 @@ def save_textbook(
                 stored_filename,
                 file_hash,
                 page_count,
-                characters_extracted
+                characters_extracted,
+                indexing_status
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (filename, stored_filename, file_hash, page_count, characters_extracted),
+            (filename, stored_filename, file_hash, page_count, characters_extracted, 'ready' if indexed else 'indexing'),
         )
 
         textbook_id = cursor.lastrowid
@@ -311,6 +315,7 @@ def get_textbooks():
             characters_extracted,
             uploaded_at
         FROM textbooks
+        WHERE indexing_status = 'ready'
         ORDER BY uploaded_at DESC
         """).fetchall()
 

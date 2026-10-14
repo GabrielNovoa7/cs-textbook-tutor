@@ -3,6 +3,7 @@ const { app, BrowserWindow, safeStorage } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
 require('./main.cjs');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function ready(predicate) {
@@ -56,7 +57,17 @@ app.whenReady().then(async () => {
     assert.notEqual(first.id, second.id);
     assert.equal(await w.webContents.executeJavaScript('localStorage.getItem("tutor-profile-name")'), 'Second workspace');
     assert.equal(await w.webContents.executeJavaScript('document.documentElement.dataset.theme'), 'amber');
-    console.log('PASS: onboarding, encrypted key, authenticated API, themes, separate profiles and switching.');
+    // Seed only the disposable smoke profile; no textbook embeddings or AI requests.
+    execFileSync(path.join(__dirname, '..', 'backend', 'venv', 'Scripts', 'python.exe'), ['-c',
+      'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("INSERT INTO textbooks(filename,stored_filename,file_hash,page_count,characters_extracted) VALUES (?,?,?,?,?)", ("Editor smoke.pdf","smoke.pdf","editor-smoke",1,100)); c.commit(); c.close()',
+      path.join(app.getPath('userData'), 'profiles', second.id, 'tutor.db')], { windowsHide: true });
+    w.reload();
+    w = await ready('Boolean(document.querySelector(".study-button"))');
+    await w.webContents.executeJavaScript('document.querySelector(".study-button").click()');
+    w = await ready('Boolean(document.querySelector(".code-toggle-button"))');
+    await w.webContents.executeJavaScript('document.querySelector(".code-toggle-button").click()');
+    w = await ready('Boolean(document.querySelector(".monaco-editor .view-lines") && /public\\s+class\\s+Main/.test(document.querySelector(".monaco-editor").textContent))');
+    console.log('PASS: onboarding, encrypted key, authenticated API, themes, separate profiles, switching and local desktop Monaco.');
     app.quit();
-  } catch (error) { console.error(error); process.exitCode = 1; app.quit(); }
+  } catch (error) { console.error(error); app.once('will-quit', () => app.exit(1)); app.quit(); }
 });

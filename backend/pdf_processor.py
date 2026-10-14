@@ -1,26 +1,44 @@
 import re
+from pathlib import Path
 import pymupdf
 
 CHAPTER_PATTERN = re.compile(
     r"^\s*Chapter\s*(\d+)\s*[.\-]?\s*(.*?)\s+(\d+)\s*$", re.IGNORECASE
 )
 
-SECTION_PATTERN = re.compile(r"^\s*(\d{1,2})[.\-](\d{1,2})[.]?\s+(.+?)\s+(\d+)\s*$")
+SECTION_PATTERN = re.compile(r"^\s*(\d{1,2})\s*[.\-]\s*(\d{1,2})[.]?\s+(.+?)\s+(\d+)\s*$")
+
+
+def join_contents_lines(text):
+    """Join wrapped TOC titles, stopping before the next numbered entry."""
+    lines = [' '.join(line.split()) for line in text.splitlines() if line.strip()]
+    heading = re.compile(r'^(?:Chapter\s*\d+|\d+(?:\s*[.\-]\s*\d+)*)\s+[A-Za-z]', re.I)
+    result = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if heading.match(line):
+            for _ in range(3):
+                if re.search(r'\d+\s*$', line) or index + 1 >= len(lines):
+                    break
+                following = lines[index + 1]
+                if heading.match(following) or re.match(r'^(?:Contents|Index|Appendix|Review Questions|Programming Challenges)\b', following, re.I):
+                    break
+                line += ' ' + following
+                index += 1
+        result.append(line)
+        index += 1
+    return result
 
 
 def extract_pages_from_pdf(file_path):
-    document = pymupdf.open(file_path)
-
-    pages = []
-
-    for page_number, page in enumerate(document, start=1):
-        pages.append({"page_number": page_number, "text": page.get_text()})
-
-    page_count = document.page_count
-
-    document.close()
-
-    return pages, page_count
+    # Opening corrupt files by path can leave a native file handle on Windows.
+    with pymupdf.open(stream=Path(file_path).read_bytes(), filetype="pdf") as document:
+        if document.needs_pass:
+            raise ValueError("Password-protected PDF")
+        pages = [{"page_number": number, "text": page.get_text()}
+                 for number, page in enumerate(document, start=1)]
+        return pages, document.page_count
 
 
 def extract_table_of_contents(file_path):
@@ -156,232 +174,6 @@ def extract_table_of_contents(file_path):
                 )
 
     return entries
-    document = pymupdf.open(file_path)
-
-    raw_toc = document.get_toc(simple=True)
-
-    document.close()
-
-    if not raw_toc:
-        return []
-
-    entries = []
-
-    chapter_word_pattern = re.compile(
-        r"^\s*Chapter\s+(\d+)" r"(?:\s*[:.\-]\s*|\s+)?" r"(.*?)\s*$", re.IGNORECASE
-    )
-
-    numeric_chapter_pattern = re.compile(r"^\s*(\d+)" r"\s*[.:\-]?\s+" r"(.+?)\s*$")
-
-    section_pattern = re.compile(
-        r"^\s*(\d+)\.(\d+)" r"(?:\.\d+)*" r"\s*[.:\-]?\s*" r"(.+?)\s*$"
-    )
-
-    for level, title, pdf_page in raw_toc:
-
-        cleaned_title = " ".join(title.split()).strip()
-
-        if not cleaned_title:
-            continue
-
-        # ---------------------------------
-        # SECTION
-        # Example:
-        # 1.1 Introduction
-        # ---------------------------------
-
-        section_match = section_pattern.match(cleaned_title)
-
-        if section_match:
-            chapter_number = section_match.group(1)
-
-            section_number = section_match.group(2)
-
-            section_title = section_match.group(3).strip()
-
-            entries.append(
-                {
-                    "type": "section",
-                    "number": (f"{chapter_number}." f"{section_number}"),
-                    "title": section_title,
-                    "book_page": None,
-                    "toc_pdf_page": pdf_page,
-                    "confidence": "direct",
-                }
-            )
-
-            continue
-
-        # ---------------------------------
-        # CHAPTER
-        # Example:
-        # Chapter 1 Introduction
-        # ---------------------------------
-
-        chapter_match = chapter_word_pattern.match(cleaned_title)
-
-        if chapter_match:
-            chapter_number = chapter_match.group(1)
-
-            chapter_title = chapter_match.group(2).strip()
-
-            if not chapter_title:
-                chapter_title = f"Chapter {chapter_number}"
-
-            entries.append(
-                {
-                    "type": "chapter",
-                    "number": chapter_number,
-                    "title": chapter_title,
-                    "book_page": None,
-                    "toc_pdf_page": pdf_page,
-                    "confidence": "direct",
-                }
-            )
-
-            continue
-
-        # ---------------------------------
-        # SOME BOOKS USE:
-        #
-        # 1 Introduction
-        # 2 Software Processes
-        # 3 Requirements
-        #
-        # Only count these when they are
-        # top-level PDF bookmarks.
-        # ---------------------------------
-
-        if level == 1:
-            numeric_match = numeric_chapter_pattern.match(cleaned_title)
-
-            if numeric_match:
-                entries.append(
-                    {
-                        "type": "chapter",
-                        "number": (numeric_match.group(1)),
-                        "title": (numeric_match.group(2).strip()),
-                        "book_page": None,
-                        "toc_pdf_page": pdf_page,
-                        "confidence": "direct",
-                    }
-                )
-
-    return entries
-
-    document = pymupdf.open(file_path)
-
-    raw_toc = document.get_toc(simple=True)
-
-    document.close()
-
-    if not raw_toc:
-        return []
-
-    entries = []
-
-    chapter_word_pattern = re.compile(
-        r"^\s*Chapter\s+(\d+)" r"(?:\s*[:.\-]\s*|\s+)?" r"(.*?)\s*$", re.IGNORECASE
-    )
-
-    numeric_chapter_pattern = re.compile(r"^\s*(\d+)" r"\s*[.:\-]?\s+" r"(.+?)\s*$")
-
-    section_pattern = re.compile(
-        r"^\s*(\d+)\.(\d+)" r"(?:\.\d+)*" r"\s*[.:\-]?\s*" r"(.+?)\s*$"
-    )
-
-    for level, title, pdf_page in raw_toc:
-
-        cleaned_title = " ".join(title.split()).strip()
-
-        if not cleaned_title:
-            continue
-
-        # -------------------------
-        # SECTION
-        # Example:
-        # 1.1 What Operating Systems Do
-        # -------------------------
-
-        section_match = section_pattern.match(cleaned_title)
-
-        if section_match:
-            chapter_number = section_match.group(1)
-
-            section_number = section_match.group(2)
-
-            section_title = section_match.group(3).strip()
-
-            entries.append(
-                {
-                    "type": "section",
-                    "number": (f"{chapter_number}." f"{section_number}"),
-                    "title": section_title,
-                    # Bookmark page numbers refer to
-                    # physical PDF pages.
-                    "book_page": None,
-                    "toc_pdf_page": pdf_page,
-                    "confidence": "direct",
-                }
-            )
-
-            continue
-
-        # -------------------------
-        # CHAPTER
-        # Example:
-        # Chapter 1 Introduction
-        # -------------------------
-
-        chapter_match = chapter_word_pattern.match(cleaned_title)
-
-        if chapter_match:
-            chapter_number = chapter_match.group(1)
-
-            chapter_title = chapter_match.group(2).strip()
-
-            if not chapter_title:
-                chapter_title = f"Chapter {chapter_number}"
-
-            entries.append(
-                {
-                    "type": "chapter",
-                    "number": chapter_number,
-                    "title": chapter_title,
-                    "book_page": None,
-                    "toc_pdf_page": pdf_page,
-                    "confidence": "direct",
-                }
-            )
-
-            continue
-
-        # -------------------------
-        # SOME BOOKS USE:
-        # 1 Introduction
-        # 2 Processes
-        # etc.
-        #
-        # Only treat these as chapters
-        # when they are top-level bookmarks.
-        # -------------------------
-
-        if level == 1:
-            numeric_chapter_match = numeric_chapter_pattern.match(cleaned_title)
-
-            if numeric_chapter_match:
-                entries.append(
-                    {
-                        "type": "chapter",
-                        "number": (numeric_chapter_match.group(1)),
-                        "title": (numeric_chapter_match.group(2).strip()),
-                        "book_page": None,
-                        "toc_pdf_page": (pdf_page),
-                        "confidence": "direct",
-                    }
-                )
-
-    return entries
 
 
 def extract_printed_table_of_contents(file_path, pages_to_scan=80):
@@ -392,14 +184,26 @@ def extract_printed_table_of_contents(file_path, pages_to_scan=80):
 
     toc_pages = []
     inside_contents = False
+    chapter_catalog = {}
 
     pages_to_check = min(pages_to_scan, document.page_count)
 
     for page_index in range(pages_to_check):
         text = document[page_index].get_text(sort=True)
 
+        if not inside_contents:
+            # Summary contents can corroborate a damaged detailed heading later.
+            for line in join_contents_lines(text):
+                match = CHAPTER_PATTERN.match(line) or numeric_chapter_pattern.match(line)
+                if match:
+                    chapter_catalog.setdefault(match.group(1), {
+                        'type': 'chapter', 'number': match.group(1), 'title': match.group(2).strip(),
+                        'book_page': int(match.group(3)), 'toc_pdf_page': page_index + 1,
+                        'confidence': 'recovered',
+                    })
+
         # Ignore the shorter "Brief Contents" page.
-        if "Brief Contents" in text:
+        if re.search(r'Brief Contents|Contents at a Glance', text, re.I):
             continue
 
         # Find the detailed table of contents.
@@ -414,9 +218,11 @@ def extract_printed_table_of_contents(file_path, pages_to_scan=80):
                     for line in text.splitlines()
                 )
 
-            has_section = re.search(r"\b1[.\-]1[.]?\b", text)
+            sections = [match for line in join_contents_lines(text)
+                        if (match := SECTION_PATTERN.match(line)) and match.group(1) == '1']
+            has_section = any(match.group(2) == '1' for match in sections)
 
-            if has_contents_heading and has_chapter and has_section:
+            if has_chapter and has_section and (has_contents_heading or len(sections) >= 2):
                 inside_contents = True
 
         if inside_contents:
@@ -433,25 +239,13 @@ def extract_printed_table_of_contents(file_path, pages_to_scan=80):
     document.close()
 
     entries = []
+    current_chapter = None
+    last_book_page = None
 
     for toc_page in toc_pages:
-        lines = toc_page["text"].splitlines()
-        # A long chapter title may wrap before its page number.
-        joined_lines = []
-        index = 0
-        while index < len(lines):
-            line = " ".join(lines[index].split())
-            if (re.match(r"^(?:Chapter\s+)?\d{1,2}\s+[A-Za-z]", line, re.I)
-                    and not re.search(r"\d+\s*$", line)
-                    and index + 1 < len(lines)
-                    and re.match(r"^[A-Za-z].*\s+\d+\s*$", lines[index + 1].strip())):
-                line += " " + " ".join(lines[index + 1].split())
-                index += 1
-            joined_lines.append(line)
-            index += 1
-        lines = joined_lines
+        lines = join_contents_lines(toc_page["text"])
 
-        for line in lines:
+        for line_index, line in enumerate(lines):
             cleaned = " ".join(line.split()).strip()
 
             if not cleaned:
@@ -460,6 +254,8 @@ def extract_printed_table_of_contents(file_path, pages_to_scan=80):
             chapter_match = CHAPTER_PATTERN.match(cleaned) or numeric_chapter_pattern.match(cleaned)
 
             if chapter_match:
+                current_chapter = chapter_match.group(1)
+                last_book_page = int(chapter_match.group(3))
                 entries.append(
                     {
                         "type": "chapter",
@@ -477,6 +273,30 @@ def extract_printed_table_of_contents(file_path, pages_to_scan=80):
             if section_match:
                 chapter_number = section_match.group(1)
 
+                if chapter_number != current_chapter and chapter_number in chapter_catalog:
+                    # Section numbering and the summary identify the chapter;
+                    # never guess its number from damaged OCR letters.
+                    entries.append(chapter_catalog[chapter_number].copy())
+                    current_chapter = chapter_number
+                    last_book_page = chapter_catalog[chapter_number]['book_page']
+
+                recovered_page = False
+                if last_book_page is not None and int(section_match.group(4)) < last_book_page:
+                    # Only recover split digits if neighboring section pages
+                    # corroborate them; titles can legitimately end in numbers.
+                    split = re.search(r'(\d+)\s+(\d+)\s*$', cleaned)
+                    following = next((match for other in lines[line_index + 1:]
+                                      if (match := SECTION_PATTERN.match(other))
+                                      and match.group(1) == chapter_number), None)
+                    candidate = int(split.group(1) + split.group(2)) if split else None
+                    if not following or candidate is None or not last_book_page <= candidate <= int(following.group(4)):
+                        continue
+                    cleaned = cleaned[:split.start()] + str(candidate)
+                    section_match = SECTION_PATTERN.match(cleaned)
+                    recovered_page = True
+
+                last_book_page = int(section_match.group(4))
+
                 section_number = section_match.group(2)
 
                 entries.append(
@@ -486,6 +306,7 @@ def extract_printed_table_of_contents(file_path, pages_to_scan=80):
                         "title": (section_match.group(3).strip()),
                         "book_page": int(section_match.group(4)),
                         "toc_pdf_page": toc_page["pdf_page"],
+                        "confidence": "recovered" if recovered_page else "direct",
                     }
                 )
 

@@ -5,6 +5,11 @@ __pycache__/
 
 # Environment variables / API keys
 .env
+.env.*
+!.env.example
+!.env.*.example
+.playwright-cli/
+output/
 
 # Uploaded textbooks
 uploads/

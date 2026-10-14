@@ -10,6 +10,7 @@ const steps = ['Your profile', 'Your workspace', 'API key', 'Ready to study'];
 export default function DesktopSetup() {
   const desktop = window.desktop;
   const [profiles, setProfiles] = useState<DesktopProfile[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(Boolean(desktop && !desktop.profile));
   const [creating, setCreating] = useState(false);
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
@@ -21,10 +22,12 @@ export default function DesktopSetup() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
-    if (desktop && !desktop.profile) desktop.listProfiles().then(setProfiles).catch(e => setError(String(e)));
+    if (desktop && !desktop.profile) desktop.listProfiles().then(setProfiles)
+      .catch(e => setError(String(e))).finally(() => setProfilesLoading(false));
   }, [desktop]);
   useEffect(() => { if (desktop && !desktop.profile) document.documentElement.dataset.theme = theme; }, [desktop, theme]);
   if (!desktop || desktop.profile) return <App />;
+  if (profilesLoading) return <main className="desktop-setup"><p role="status">Loading your profiles…</p></main>;
   async function launch(action: () => Promise<void>) {
     setBusy(true); setError('');
     try { await action(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); setBusy(false); }

@@ -7,9 +7,12 @@ from hashlib import sha256
 from uuid import uuid4
 from contextlib import closing
 
-from pydantic import BaseModel, StrictInt
+from pydantic import BaseModel, StrictInt, Field, field_validator
 
+import logging
 import shutil
+import sqlite3
+import pymupdf
 
 
 from backend.pdf_processor import (
@@ -18,6 +21,7 @@ from backend.pdf_processor import (
     extract_printed_table_of_contents,
     extract_page_text_range,
     analyze_table_of_contents,
+    find_toc_warnings,
 )
 
 from backend.text_chunker import chunk_pages
@@ -46,7 +50,8 @@ from backend.lesson_source import build_section_source
 from backend.concept_check import load_or_create, submit_attempt, attempt_history
 from backend.lesson_activity import load_activity, save_activity
 
-from backend.vector_store import add_textbook_chunks, search_textbook
+from backend.vector_store import (add_textbook_chunks, search_textbook, delete_textbook_chunks,
+                                  get_textbook_chunks, restore_textbook_chunks)
 
 from backend.tutor import generate_tutor_response
 
@@ -64,11 +69,18 @@ from backend.config import DATA_DIR, DESKTOP_TOKEN
 
 
 class AskRequest(BaseModel):
-    question: str
+    question: str = Field(min_length=1, max_length=40000)
+
+    @field_validator('question')
+    @classmethod
+    def nonblank_question(cls, value):
+        if not value.strip():
+            raise ValueError('Enter a question.')
+        return value.strip()
 
 
 class CreateChatRequest(BaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=200)
 
 
 class CodeRunRequest(BaseModel):
@@ -131,7 +143,7 @@ def desktop_api_key(body: DesktopKey):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"] + (["null"] if DESKTOP_TOKEN else []),
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"] + (["null"] if DESKTOP_TOKEN else []),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -141,6 +153,8 @@ app.add_middleware(
 UPLOAD_FOLDER = DATA_DIR / "uploads"
 
 UPLOAD_FOLDER.mkdir(exist_ok=True)
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+logger = logging.getLogger(__name__)
 
 
 init_db()
@@ -196,11 +210,39 @@ def delete_textbook(textbook_id: int):
     file_path = (UPLOAD_FOLDER / textbook["stored_filename"]).resolve()
     if file_path.parent != UPLOAD_FOLDER.resolve():
         raise HTTPException(400, "Invalid textbook file path.")
-    with closing(get_connection()) as connection:
-        with connection:
+    backup_path = UPLOAD_FOLDER / f'{uuid4().hex}.deleting'
+    snapshot = None
+    deleting_vectors = False
+    keep_backup = False
+    try:
+        snapshot = get_textbook_chunks(textbook_id)
+        if file_path.exists():
+            shutil.copy2(file_path, backup_path)
+        with closing(get_connection()) as connection, connection:
             # Foreign-key cascades remove all book-owned records together.
             connection.execute("DELETE FROM textbooks WHERE id=?", (textbook_id,))
+            deleting_vectors = True
+            delete_textbook_chunks(textbook_id)
             file_path.unlink(missing_ok=True)
+    except Exception:
+        if deleting_vectors:
+            try:
+                restore_textbook_chunks(snapshot)
+            except Exception:
+                logger.error("Deletion index recovery failed for textbook %s", textbook_id)
+        if backup_path.exists() and not file_path.exists():
+            try:
+                backup_path.replace(file_path)
+            except OSError:
+                keep_backup = True
+                logger.error("PDF recovery backup retained for textbook %s", textbook_id)
+        raise HTTPException(503, "Could not delete the textbook. Close any open PDF and try again.") from None
+    finally:
+        if not keep_backup:
+            try:
+                backup_path.unlink(missing_ok=True)
+            except OSError:
+                logger.warning("Deletion backup cleanup pending for textbook %s", textbook_id)
     return {"deleted": True, "textbook_id": textbook_id}
 
 
@@ -353,6 +395,11 @@ def read_learning_path(textbook_id: int):
         }
 
     chapters = get_learning_path(textbook_id)
+    warnings = find_toc_warnings([
+        {'number': chapter['chapter_number'],
+         'sections': [{'number': section['section_number']} for section in chapter['sections']]}
+        for chapter in chapters
+    ])
 
     return {
         "textbook_id": textbook_id,
@@ -360,6 +407,7 @@ def read_learning_path(textbook_id: int):
         "built": True,
         "chapters_found": len(chapters),
         "chapters": chapters,
+        "warnings": warnings,
     }
 
 
@@ -509,7 +557,7 @@ def debug_textbook_pages(textbook_id: int, start_page: int = 10, end_page: int =
 
 
 @app.post("/upload-textbook")
-async def upload_textbook(file: UploadFile = File(...)):
+def upload_textbook(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(
             status_code=400, detail=("Only PDF textbooks are " "currently supported.")
@@ -521,39 +569,65 @@ async def upload_textbook(file: UploadFile = File(...)):
 
     file_path = UPLOAD_FOLDER / stored_filename
 
-    with file_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    textbook_id = None
+    keep_file = False
+    try:
+        # Work in FastAPI's thread pool; PDF parsing/embedding must not block health requests.
+        with file_path.open("wb") as buffer:
+            size = 0
+            while block := file.file.read(1024 * 1024):
+                size += len(block)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(413, "PDF exceeds the 100 MB upload limit.")
+                buffer.write(block)
 
-    file_hash = calculate_file_hash(file_path)
+        file_hash = calculate_file_hash(file_path)
+        existing_textbook = get_textbook_by_hash(file_hash)
+        if existing_textbook:
+            if existing_textbook['indexing_status'] != 'ready':
+                raise HTTPException(409, "This textbook is still being indexed. Wait for its upload to finish.")
+            return {"message": "This textbook has already been uploaded.",
+                    "textbook_id": existing_textbook["id"], "filename": existing_textbook["filename"],
+                    "already_exists": True}
 
-    existing_textbook = get_textbook_by_hash(file_hash)
-
-    if existing_textbook:
-        file_path.unlink(missing_ok=True)
-
-        return {
-            "message": ("This textbook has already " "been uploaded."),
-            "textbook_id": (existing_textbook["id"]),
-            "filename": (existing_textbook["filename"]),
-            "already_exists": True,
-        }
-
-    pages, page_count = extract_pages_from_pdf(file_path)
-
-    chunks = chunk_pages(pages)
-
-    characters_extracted = sum(len(page["text"]) for page in pages)
-
-    textbook_id = save_textbook(
-        filename=original_filename,
-        stored_filename=stored_filename,
-        file_hash=file_hash,
-        page_count=page_count,
-        characters_extracted=(characters_extracted),
-        chunks=chunks,
-    )
-
-    add_textbook_chunks(textbook_id=textbook_id, chunks=chunks)
+        try:
+            pages, page_count = extract_pages_from_pdf(file_path)
+        except (pymupdf.FileDataError, RuntimeError, ValueError):
+            raise HTTPException(422, "Could not read this PDF. Check that it is valid and not password protected.") from None
+        chunks = chunk_pages(pages)
+        if not chunks:
+            raise HTTPException(422, "No readable text was found. Scanned PDFs need OCR before upload.")
+        characters_extracted = sum(len(page["text"]) for page in pages)
+        try:
+            textbook_id = save_textbook(original_filename, stored_filename, file_hash,
+                                        page_count, characters_extracted, chunks, indexed=False)
+        except sqlite3.IntegrityError:
+            # A concurrent upload may have saved the same hash after the first check.
+            existing = get_textbook_by_hash(file_hash)
+            if not existing:
+                raise
+            if existing['indexing_status'] != 'ready':
+                raise HTTPException(409, "This textbook is still being indexed. Wait for its upload to finish.")
+            return {"textbook_id": existing["id"], "filename": existing["filename"], "already_exists": True}
+        add_textbook_chunks(textbook_id=textbook_id, chunks=chunks)
+        with closing(get_connection()) as connection, connection:
+            connection.execute("UPDATE textbooks SET indexing_status='ready' WHERE id=?", (textbook_id,))
+        keep_file = True
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(503, "Could not process the textbook. Please try uploading again.") from None
+    finally:
+        if not keep_file:
+            if textbook_id is not None:
+                try:
+                    delete_textbook_chunks(textbook_id)
+                except Exception:
+                    logger.error("Upload index cleanup failed for textbook %s", textbook_id)
+                with closing(get_connection()) as connection, connection:
+                    connection.execute("DELETE FROM textbooks WHERE id=?", (textbook_id,))
+            file_path.unlink(missing_ok=True)
+        file.file.close()
 
     return {
         "textbook_id": textbook_id,
@@ -572,6 +646,8 @@ async def upload_textbook(file: UploadFile = File(...)):
 
 @app.get("/textbooks/{textbook_id}/search")
 def search_textbook_chunks(textbook_id: int, query: str):
+    if not get_textbook(textbook_id):
+        raise HTTPException(404, "Textbook was not found.")
     results = search_textbook(textbook_id=textbook_id, query=query)
 
     return {"query": query, "textbook_id": textbook_id, "results": results}
@@ -584,6 +660,8 @@ def search_textbook_chunks(textbook_id: int, query: str):
 
 @app.post("/textbooks/{textbook_id}/ask")
 def ask_textbook(textbook_id: int, request: AskRequest):
+    if not get_textbook(textbook_id):
+        raise HTTPException(404, "Textbook was not found.")
     passages = search_textbook(
         textbook_id=textbook_id, query=request.question, results=5
     )
@@ -614,6 +692,8 @@ def ask_textbook(textbook_id: int, request: AskRequest):
 
 @app.post("/textbooks/{textbook_id}/chats")
 def create_textbook_chat(textbook_id: int, request: CreateChatRequest):
+    if not get_textbook(textbook_id):
+        raise HTTPException(404, "Textbook was not found.")
     chat_id = create_chat(textbook_id=textbook_id, title=request.title)
 
     return {"chat_id": chat_id, "textbook_id": textbook_id, "title": request.title}

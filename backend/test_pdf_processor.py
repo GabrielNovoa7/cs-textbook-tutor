@@ -5,9 +5,83 @@ from pathlib import Path
 import pymupdf
 
 from backend.pdf_processor import extract_printed_table_of_contents, analyze_table_of_contents
+from backend.lesson_source import find_chapter_content_page
 
 
 class PrintedContentsTests(unittest.TestCase):
+    def extract_pages(self, pages):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'book.pdf'
+            with pymupdf.open() as document:
+                for text in pages:
+                    document.new_page().insert_text((40, 40), text)
+                document.save(path)
+            return analyze_table_of_contents(extract_printed_table_of_contents(path))
+
+    def test_detailed_contents_without_readable_heading(self):
+        result = self.extract_pages([
+            'Contents at a Glance\nCHAPTER 1 Basics 1\nCHAPTER 2 Programs 20',
+            'CHAPTER 1 Basics 1\n1.1 Why Program? 1\n1.2 Computer Systems 2',
+            'Contents\nCHAPTER 2 Programs 20\n2.1 Parts 20\nIndex 100',
+        ])
+        self.assertEqual([c['number'] for c in result['chapters']], ['1', '2'])
+        self.assertEqual(len(result['chapters'][0]['sections']), 2)
+
+    def test_spaced_numbers_wrapped_titles_and_page_digits(self):
+        result = self.extract_pages([
+            'Contents\nCHAPTER 1 Basics 1\n1.1 Introduction 123\n'
+            '1. 2 A Long Section Title\nContinued Here 125\n'
+            '1 .3 Last Topic 12 7\n1.4 Next Topic 130\nIndex 200',
+        ])
+        sections = result['chapters'][0]['sections']
+        self.assertEqual([s['number'] for s in sections], ['1.1', '1.2', '1.3', '1.4'])
+        self.assertEqual(sections[1]['title'], 'A Long Section Title Continued Here')
+        self.assertEqual(sections[2]['book_page'], 127)
+
+    def test_numeric_title_suffix_is_not_merged_into_page_number(self):
+        result = self.extract_pages([
+            'Contents\nCHAPTER 1 Basics 1\n1.1 Introduction to C++ 17 25\n'
+            '1.2 More Examples 30\nIndex 100',
+        ])
+        section = result['chapters'][0]['sections'][0]
+        self.assertEqual(section['title'], 'Introduction to C++ 17')
+        self.assertEqual(section['book_page'], 25)
+
+    def test_summary_recovers_damaged_chapter_header_from_section_number(self):
+        result = self.extract_pages([
+            'Contents at a Glance\nCHAPTER 1 Basics 1\nCHAPTER 5 Loops 100',
+            'CHAPTER 1 Basics 1\n1.1 Introduction 1\n1.2 Systems 2',
+            'Contents\nCHAPTERS Loops 100\n5 .1 Counters 100\n5.2 Loops 105\nIndex 200',
+        ])
+        self.assertEqual([c['number'] for c in result['chapters']], ['1', '5'])
+        self.assertEqual(result['chapters'][1]['title'], 'Loops')
+        self.assertEqual([s['number'] for s in result['chapters'][1]['sections']], ['5.1', '5.2'])
+
+    def test_lone_numbered_body_heading_does_not_start_contents(self):
+        result = self.extract_pages(['CHAPTER 1 Basics 1\n1.1 Introduction 1\nThis is ordinary chapter prose.'])
+        self.assertEqual(result['chapters'], [])
+
+    def test_chapter_mapping_skips_preface_and_accepts_topics_opening(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'book.pdf'
+            with pymupdf.open() as document:
+                for text in ('Cover', 'Contents', 'Blank', 'Blank', 'Blank', 'Blank',
+                             'Preface\nChapter 1 Introduction\nThis describes the chapter.\nxvii',
+                             'TOPICS\n1.1 Basics\n1.2 Systems\nActual chapter reading.\n1'):
+                    document.new_page().insert_text((40, 40), text)
+                document.save(path)
+            self.assertEqual(find_chapter_content_page(path, '1', 'Introduction', 1, 2), 8)
+
+    def test_chapter_mapping_does_not_guess_a_scanned_opening(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'book.pdf'
+            with pymupdf.open() as document:
+                for text in ('Cover', 'Contents', 'Blank', 'Blank', 'Blank', 'Blank',
+                             'Preface\nChapter 5 Loops\nThis describes the chapter.\nxvii', ''):
+                    document.new_page().insert_text((40, 40), text)
+                document.save(path)
+            self.assertIsNone(find_chapter_content_page(path, '5', 'Loops', 100, 2))
+
     def test_contents_stops_before_running_headers_and_joins_titles(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "book.pdf"

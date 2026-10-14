@@ -98,11 +98,21 @@ Rerun `npm run desktop:build` after changes. Increment the root `package.json` v
 
 ```powershell
 npm --prefix frontend run build
-.\backend\venv\Scripts\python.exe -m unittest backend.test_desktop backend.test_learning_tools backend.test_concept_check backend.test_pdf_processor
+.\backend\venv\Scripts\python.exe -m unittest backend.test_desktop backend.test_learning_tools backend.test_concept_check backend.test_pdf_processor backend.test_api backend.test_code_runner backend.test_tutor
 npm run desktop:test
 ```
 
 Desktop integration tests use disposable profiles under `desktop-build/smoke-profiles/` and make no OpenAI requests.
+
+The [October 13 project audit and roadmap](docs/project-audit-2026-10-13.md)
+documents existing capabilities, first-pass fixes, remaining issues, and the
+repeatable Playwright browser smoke check. See also the
+[security review](security_best_practices_report.md).
+
+Uploads have a 100 MB limit and require selectable PDF text. Books become
+available after indexing succeeds; duplicate requests during indexing report
+that processing is still underway. The code editor is bundled locally and does
+not require a CDN connection. Code execution remains for trusted local programs.
 
 Before a release, check:
 
