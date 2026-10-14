@@ -20,6 +20,9 @@ app.whenReady().then(async () => {
   try {
     let w = await ready('Boolean(window.desktop && document.querySelector("h1"))');
     assert.equal(await w.webContents.executeJavaScript('window.desktop.profile'), null);
+    assert.equal(await w.webContents.executeJavaScript('document.documentElement.classList.contains("desktop-shell")'), true);
+    assert.equal(await w.webContents.executeJavaScript('document.querySelector(".window-titlebar").getBoundingClientRect().height'), 44);
+    assert.equal(await w.webContents.executeJavaScript('navigator.windowControlsOverlay.visible'), true);
     await w.webContents.executeJavaScript(`
       [...document.querySelectorAll('button')].find(b => b.textContent === 'Create a new profile')?.click();
     `);
@@ -63,6 +66,9 @@ app.whenReady().then(async () => {
       path.join(app.getPath('userData'), 'profiles', second.id, 'tutor.db')], { windowsHide: true });
     w.reload();
     w = await ready('Boolean(document.querySelector(".study-button"))');
+    await pause(700);
+    await fs.mkdir(path.join(__dirname, '..', 'output', 'playwright'), { recursive: true });
+    await fs.writeFile(path.join(__dirname, '..', 'output', 'playwright', 'desktop-refreshed.png'), (await w.webContents.capturePage()).toPNG());
     await w.webContents.executeJavaScript('document.querySelector(".study-button").click()');
     w = await ready('Boolean(document.querySelector(".code-toggle-button"))');
     await w.webContents.executeJavaScript('document.querySelector(".code-toggle-button").click()');

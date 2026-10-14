@@ -78,7 +78,8 @@ async function showWindow(profile = null) {
   const previous = window;
   const bootstrap = { apiBase: profile ? apiBase : '', token: profile ? sessionToken : '', profile };
   const next = new BrowserWindow({ width: 1360, height: 900, minWidth: 850, minHeight: 650, show: false, autoHideMenuBar: true,
-    title: 'CS Textbook Tutor', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, plugins: true,
+    title: 'CS Textbook Tutor', icon: path.join(__dirname, 'icon.ico'), titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#101114', symbolColor: '#c8cbd2', height: 44 }, backgroundColor: '#101114', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, plugins: true,
       partition: profile ? `persist:tutor-${profile.id}` : 'persist:tutor-setup',
       additionalArguments: ['--tutor-bootstrap=' + Buffer.from(JSON.stringify(bootstrap)).toString('base64')] } });
   window = next;

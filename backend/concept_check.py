@@ -298,8 +298,9 @@ def generate_questions(reading, candidates, source, context, save_response=None)
     count = assessment_size(context) if "textbook_id" in context else 4
     excerpts = evidence_excerpts(reading)
     schema = DraftLesson.model_json_schema()
-    for definition in ("DraftQuestion", "DraftActivity"):
-        schema["$defs"][definition]["properties"]["evidence_quote"]["enum"] = [item["quote"] for item in excerpts]
+    # Textbook sentences belong in prompt data, not schema enum literals:
+    # quotes in a sentence can be rejected by the provider's strict-schema parser.
+    # validate_questions still requires every returned quotation in this reading.
     response = client.with_options(max_retries=0, timeout=90).responses.create(
         model="gpt-6-luna",
         store=False,

@@ -19,6 +19,7 @@ export function resourceUrl(path: string) {
 }
 export function initializeDesktop() {
   const desktop = window.desktop;
+  if (desktop) document.documentElement.classList.add('desktop-shell');
   if (!desktop?.profile) return;
   for (const [key, value] of [['tutor-profile-name', desktop.profile.name], ['tutor-theme', desktop.profile.theme]]) {
     if (!localStorage.getItem(key)) localStorage.setItem(key, value);

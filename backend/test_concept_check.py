@@ -309,10 +309,6 @@ class ConceptCheckTests(unittest.TestCase):
                 quiz.generate_questions([{"pdf_page": 1, "text": "Objects represent instances of classes in a program."}], [], {}, {"section_number": "1.1", "section_title": "Objects"},
                                         save_response=save_response)
         save_response.assert_called_once()
-        schema = client.with_options.return_value.responses.create.call_args.kwargs["text"]["format"]["schema"]
-        for definition in ("DraftQuestion", "DraftActivity"):
-            self.assertEqual(schema["$defs"][definition]["properties"]["evidence_quote"]["enum"],
-                             ["Objects represent instances of classes in a program."])
 
     def test_evidence_choices_are_bounded_exact_excerpts(self):
         reading = [{"pdf_page": page, "text": " ".join(
@@ -420,6 +416,33 @@ class ConceptCheckTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 quiz.generate_questions([{"pdf_page": 1, "text": evidence}], [],
                                         {"pdf_start_page": 1}, {"section_number": "1.1", "section_title": "Objects"})
+
+    def test_quoted_textbook_evidence_does_not_break_provider_schema(self):
+        evidence = 'A program can display "Hello" on the screen.'
+        draft = {'questions': [{
+            'question_type': 'true_false', 'prompt': f'Screen output question {i}',
+            'options': ['True', 'False'], 'correct_index': 0,
+            'explanation': 'A program can display text.', 'review_hint': 'Review page 1.',
+            'candidate_id': None, 'evidence_page': 1, 'evidence_quote': evidence,
+        } for i in range(4)], 'activity': None}
+        def provider(**parameters):
+            def check(value):
+                if isinstance(value, dict):
+                    if any('"' in item for item in value.get('enum', []) if isinstance(item, str)):
+                        raise ValueError('Provider rejected a quote in a strict-schema literal')
+                    for item in value.values():
+                        check(item)
+                elif isinstance(value, list):
+                    for item in value:
+                        check(item)
+            check(parameters['text']['format']['schema'])
+            return SimpleNamespace(output_text=json.dumps(draft))
+        client = Mock()
+        client.with_options.return_value.responses.create.side_effect = provider
+        with patch.dict('sys.modules', {'backend.tutor': SimpleNamespace(client=client)}):
+            questions = quiz.generate_questions([{'pdf_page': 1, 'text': evidence}], [],
+                                               {'pdf_start_page': 1}, {'section_number': '1.1', 'section_title': 'Output'})
+        self.assertEqual(questions[0]['evidence_quote'], evidence)
 
 
 if __name__ == "__main__":

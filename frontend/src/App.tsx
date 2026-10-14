@@ -8,6 +8,8 @@ import ConceptCheck from "./ConceptCheck";
 import ProfilePreferences from "./ProfilePreferences";
 import LessonActivity from "./LessonActivity";
 import BookCover from "./BookCover";
+import WorkspaceIcon from "./WorkspaceIcon";
+import ProgressRing from "./ProgressRing";
 import { StudyDashboard, SectionNotes, ChapterReview } from "./StudyTools";
 import { starters } from "./codeSamples";
 
@@ -1365,6 +1367,7 @@ Please connect your explanation to the textbook when relevant.
           </div>
 
           <div className="overall-progress">
+            <ProgressRing value={overallProgress} />
             <div className="overall-progress-top">
               <span>Overall Progress</span>
 
@@ -1594,7 +1597,7 @@ Please connect your explanation to the textbook when relevant.
           <div>
             <h1>Textbook Tutor</h1>
 
-            <p>AI Study Assistant</p>
+            <p>Your study workspace</p>
           </div>
         </div>
 
@@ -1609,7 +1612,7 @@ Please connect your explanation to the textbook when relevant.
               closeLearningPathBook();
             }}
           >
-            <span>📚</span>
+            <WorkspaceIcon name="library" />
             Library
           </button>
 
@@ -1623,7 +1626,7 @@ Please connect your explanation to the textbook when relevant.
               closeLearningPathBook();
             }}
           >
-            <span>🗺️</span>
+            <WorkspaceIcon name="path" />
             Learning Path
           </button>
 
@@ -1633,7 +1636,7 @@ Please connect your explanation to the textbook when relevant.
             }
             onClick={() => setActiveSection("chats")}
           >
-            <span>💬</span>
+            <WorkspaceIcon name="chat" />
             Chats
           </button>
 
@@ -1643,7 +1646,7 @@ Please connect your explanation to the textbook when relevant.
             }
             onClick={() => setActiveSection("progress")}
           >
-            <span>📊</span>
+            <WorkspaceIcon name="progress" />
             Progress
           </button>
         </nav>
